@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import md5 from 'js-md5';
 
@@ -268,6 +268,19 @@ function App() {
       }
   };
 
+  // Auto Refresh Interval
+  useEffect(() => {
+      let interval;
+      if (busData && routeNo) {
+          interval = setInterval(() => {
+              console.log("Auto-refreshing data...");
+              // Pass current stops so we don't lose structure, but update content
+              fetchRealtimeBus(routeNo, direction, busData.stops);
+          }, 5000);
+      }
+      return () => clearInterval(interval);
+  }, [busData, routeNo, direction]); // Dependency on busData ensures we wait 5s after EACH update (preventing overlap)
+
   return (
     <div className="min-h-screen bg-gray-100 p-4 font-sans">
       <div className="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6">
@@ -304,7 +317,7 @@ function App() {
         {busData && (
            <div className="flex justify-end mb-2">
              <button 
-               onClick={handleSearch}
+               onClick={() => fetchRealtimeBus(routeNo, direction, busData.stops)}
                className="text-gray-500 text-sm flex items-center gap-1 hover:text-teal-600"
              >
                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
