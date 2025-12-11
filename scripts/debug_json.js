@@ -63,14 +63,9 @@ async function testJsonApi(routeNo, dir) {
     console.log("Status:", response.status);
     const data = response.data.data;
     if (data) {
-        console.log("Keys:", Object.keys(data));
-        if (data.busInfo) {
-            console.log("BusInfo Type:", typeof data.busInfo);
-            console.log("BusInfo Content:", JSON.stringify(data.busInfo).substring(0, 1000));
-        }
-        if (data.routeInfo && data.routeInfo.length > 0) {
-            console.log("RouteInfo Sample:", Object.keys(data.routeInfo[0]));
-        }
+        // Print EVERYTHING to find routeType
+        console.log("Full Data Keys:", Object.keys(data));
+        console.log("Full Data Dump:", JSON.stringify(data, null, 2));
     } else {
         console.log("Data is null/empty");
     }
@@ -113,12 +108,7 @@ async function testRealtime(routeCode, dir) {
 }
 
 async function run() {
-    await testJsonApi("N2", "0");
-    await testJsonApi("N2", "1");
-    
-    // N2 code is 000N2
-    await testRealtime("000N2", "0");
-    await testRealtime("000N2", "1");
+    await testJsonApi("33", "0");
 }
 
 run();

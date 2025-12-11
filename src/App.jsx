@@ -102,34 +102,45 @@ function App() {
   };
 
   const fetchRealtimeBus = async (rNo, dir, currentStops) => {
-      // Use captured params structure for routestation/bus
-      // Order matters!
-      const params = {
-          action: 'dy',
-          routeName: rNo,
-          dir: dir,
-          lang: 'zh-tw',
-          routeType: '0',
-          device: 'web'
-      };
+      // routeType varies (N2=0, N3=2, 33=2). 
+      // Without a map, we probe both 0 and 2.
+      const typesToTry = ['0', '1', '2']; // Try 0, 1, 2 to be safe? Spy saw 0 and 2. 
+      // Let's stick to 0 and 2 for now based on observations. N3 and 33 are 2. N2 is 0.
+      const candidateTypes = ['0', '2'];
 
-      const token = generateDsatToken(params);
-      const body = new URLSearchParams(params).toString();
-      
-      const targetUrl = isDev 
-        ? '/macauweb/routestation/bus' 
-        : 'https://cors-anywhere.herokuapp.com/https://bis.dsat.gov.mo:37812/macauweb/routestation/bus';
+      const requests = candidateTypes.map(type => {
+          const params = {
+              action: 'dy',
+              routeName: rNo,
+              dir: dir,
+              lang: 'zh-tw',
+              routeType: type,
+              device: 'web'
+          };
+          const token = generateDsatToken(params);
+          const body = new URLSearchParams(params).toString();
+          
+          const targetUrl = isDev 
+            ? '/macauweb/routestation/bus' 
+            : 'https://cors-anywhere.herokuapp.com/https://bis.dsat.gov.mo:37812/macauweb/routestation/bus';
+            
+          return axios.post(targetUrl, body, {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'token': token
+                }
+          }).then(res => ({ type, data: res.data })).catch(err => ({ type, error: err }));
+      });
 
       try {
-          const res = await axios.post(targetUrl, body, {
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                'token': token
-            }
-          });
+          const results = await Promise.all(requests);
           
-          if (res.data && res.data.data && res.data.data.routeInfo) {
-              const realtimeStops = res.data.data.routeInfo;
+          // Find the one with header "000"
+          const validResult = results.find(r => r.data && r.data.header === "000");
+          
+          if (validResult && validResult.data && validResult.data.data && validResult.data.data.routeInfo) {
+              console.log(`Found valid data with routeType=${validResult.type}`);
+              const realtimeStops = validResult.data.data.routeInfo;
               
               // Merge bus info into currentStops
               // Match by staCode
@@ -153,6 +164,8 @@ function App() {
                   stops: updatedStops,
                   buses: allBuses
               }));
+          } else {
+             console.warn("No valid realtime data found in probes:", results);
           }
       } catch (e) {
           console.error("Realtime fetch failed", e);
