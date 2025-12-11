@@ -377,7 +377,7 @@ function App() {
 
                         {/* Station Dot */}
                         <div className={`absolute -left-[5px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm z-10 ${
-                            stop.buses.some(b => b.status === '1') ? 'bg-red-500 animate-pulse' : 'bg-gray-400'
+                            stop.buses.some(b => b.status === '1') ? 'bg-blue-500 animate-pulse' : 'bg-gray-400'
                         }`}></div>
                         
                         {/* 
@@ -389,15 +389,18 @@ function App() {
                              <div className="absolute top-0 -left-36 w-32 flex flex-col items-end gap-1 z-20 transform -translate-y-1">
                                 {stop.buses.filter(b => b.status === '1').map((bus, bi) => (
                                     <div key={bi} className="flex flex-col items-end gap-1 z-20 w-full">
-                                        {/* Plate Pill */}
-                                        <div className="bg-red-500 text-white text-xs px-2 py-1 rounded shadow-sm font-bold flex items-center gap-1 justify-end w-full">
-                                            <span className="truncate">{bus.busPlate}</span>
-                                            <span>🛑</span>
+                                        {/* Plate Pill - Styled to match Moving Bus (White with Blue Border) */}
+                                        <div className="bg-white border border-blue-500 text-blue-700 text-xs px-2 py-1 rounded-full shadow-sm flex items-center justify-end gap-1 whitespace-nowrap w-full">
+                                            <span className="font-bold">{bus.busPlate}</span>
+                                            <span>🚌</span>
+                                            <span className="text-[10px] font-medium border-l border-blue-200 pl-1 ml-0.5">
+                                                {bus.speed}km/h
+                                            </span>
                                         </div>
                                         {/* Bus Type for Arrived */}
                                         <div className="flex gap-1 justify-end w-full flex-wrap">
                                             {bus.busType && (
-                                                <div className="text-[9px] bg-red-100 text-red-800 border border-red-200 px-1.5 rounded-full shadow-sm whitespace-nowrap">
+                                                <div className="text-[9px] bg-blue-100 text-blue-800 border border-blue-200 px-1.5 rounded-full shadow-sm whitespace-nowrap">
                                                     {getBusTypeLabel(bus.busType)}
                                                 </div>
                                             )}
