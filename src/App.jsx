@@ -101,6 +101,16 @@ function App() {
     }
   };
 
+  // Helper to map busType
+  const getBusTypeLabel = (type) => {
+      switch(type) {
+          case '1': return 'Large'; // 大巴
+          case '2': return 'Medium'; // 中巴
+          case '3': return 'Small'; // 小巴
+          default: return type;
+      }
+  };
+
   const fetchRealtimeBus = async (rNo, dir, currentStops) => {
       // routeType varies (N2=0, N3=2, 33=2). 
       // Without a map, we probe both 0 and 2.
@@ -279,9 +289,18 @@ function App() {
                         {stop.buses.filter(b => b.status === '1').length > 0 && (
                              <div className="absolute top-0 -left-24 w-20 flex flex-col items-end gap-1 z-20 transform -translate-y-1">
                                 {stop.buses.filter(b => b.status === '1').map((bus, bi) => (
-                                    <div key={bi} className="bg-red-500 text-white text-xs px-2 py-1 rounded shadow-sm font-bold flex items-center gap-1 justify-end">
-                                        <span className="truncate">{bus.busPlate}</span>
-                                        <span>🛑</span>
+                                    <div key={bi} className="flex flex-col items-end gap-1 z-20">
+                                        {/* Plate Pill */}
+                                        <div className="bg-red-500 text-white text-xs px-2 py-1 rounded shadow-sm font-bold flex items-center gap-1 justify-end">
+                                            <span className="truncate">{bus.busPlate}</span>
+                                            <span>🛑</span>
+                                        </div>
+                                        {/* Bus Type for Arrived */}
+                                        {bus.busType && (
+                                            <div className="text-[9px] bg-red-100 text-red-800 border border-red-200 px-1.5 rounded-full shadow-sm">
+                                                {getBusTypeLabel(bus.busType)}
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                              </div>
@@ -301,18 +320,20 @@ function App() {
                         */}
                         {stop.buses.filter(b => b.status === '0').map((bus, bi) => (
                             <div key={bi} className="absolute -top-5 -left-24 w-20 flex justify-end z-0 transform -translate-y-1/2">
-                                <div className="flex items-center gap-1">
-                                     {/* Bus Plate Label */}
-                                     {/* <div className="bg-teal-100 text-teal-800 text-xs px-1 py-0.5 rounded shadow-sm border border-teal-200">
-                                        {bus.busPlate}
-                                     </div> */}
-                                     
+                                <div className="flex flex-col items-end gap-1">
                                      {/* Bus Pill with Speed */}
                                      <div className="bg-white border border-teal-500 text-teal-700 text-xs px-2 py-1 rounded-full shadow-sm flex items-center gap-1 overflow-hidden whitespace-nowrap">
                                          <span className="font-bold">{bus.busPlate}</span>
                                          <span>🚌</span>
                                          {/* <span className="text-[9px]">{bus.speed}km</span> */}
                                      </div>
+                                     
+                                     {/* Bus Type Label for Moving */}
+                                     {bus.busType && (
+                                         <div className="text-[9px] bg-teal-100 text-teal-800 border border-teal-200 px-1.5 rounded-full shadow-sm">
+                                             {getBusTypeLabel(bus.busType)}
+                                         </div>
+                                     )}
                                 </div>
                             </div>
                         ))}
