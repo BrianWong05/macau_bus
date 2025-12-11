@@ -111,14 +111,73 @@ function App() {
       }
   };
 
+  // Fetch Traffic Data (New Endpoint)
+  // https://bis.dsat.gov.mo:37812/ddbus/common/supermap/routeStation/traffic
+  const fetchTrafficData = async (rNo, dir) => {
+    try {
+        const date = new Date();
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        const hh = String(date.getHours()).padStart(2, '0');
+        const min = String(date.getMinutes()).padStart(2, '0');
+        const ss = String(date.getSeconds()).padStart(2, '0');
+        const request_id = `${yyyy}${mm}${dd}${hh}${min}${ss}`;
+        
+        const params = {
+            device: 'web',
+            HUID: 'ddc052eb-c185-477a-b40a-a4dbbd3ebae2', // Use static HUID provided
+            routeCode: '000' + rNo, // Prefix with 000 based on observation 000N2
+            direction: dir,
+            indexType: '00',
+            lang: 'zh_tw', // underscore
+            categoryIds: 'BCAFBD938B8D48B0B3F598B44DD32E6C'
+        };
+        // Token generation not needed for this GET request based on user url?
+        // But debug script worked without token in params, just standard headers?
+        // Actually debug script sent standard headers.
+        // Let's rely on standard axios get.
+        
+        const qs = new URLSearchParams(params).toString();
+        const targetUrl = isDev 
+            ? `/ddbus/common/supermap/routeStation/traffic?${qs}`
+            : `https://cors-anywhere.herokuapp.com/https://bis.dsat.gov.mo:37812/ddbus/common/supermap/routeStation/traffic?${qs}`;
+
+        console.log("Fetching Traffic from:", targetUrl);
+
+        const response = await axios.get(targetUrl, {
+             headers: {
+                'User-Agent': 'Mozilla/5.0'
+             }
+        });
+        
+        if (response.data) {
+             console.log("Full Traffic Response:", response.data);
+             if (response.data.data && response.data.data.stationInfo) {
+             const stationInfo = response.data.data.stationInfo;
+             // Convert to Map: staCode -> trafficLevel
+             const trafficMap = {};
+             stationInfo.forEach(item => {
+                 trafficMap[item.stationCode] = item.trafficLevel;
+             });
+             console.log("Parsed Traffic Map:", trafficMap);
+             return trafficMap;
+        }
+    }
+    return {};
+    } catch (e) {
+        console.error("Traffic Fetch Error:", e);
+        return {};
+    }
+  };
+
   const fetchRealtimeBus = async (rNo, dir, currentStops) => {
       // routeType varies (N2=0, N3=2, 33=2). 
       // Without a map, we probe both 0 and 2.
-      const typesToTry = ['0', '1', '2']; // Try 0, 1, 2 to be safe? Spy saw 0 and 2. 
-      // Let's stick to 0 and 2 for now based on observations. N3 and 33 are 2. N2 is 0.
-      const candidateTypes = ['0', '2'];
-
-      const requests = candidateTypes.map(type => {
+      const typesToProbe = ['0', '2'];
+      
+      // Parallel Probe for bus data
+      const promises = typesToProbe.map(type => {
           const params = {
               action: 'dy',
               routeName: rNo,
@@ -128,38 +187,53 @@ function App() {
               device: 'web'
           };
           const token = generateDsatToken(params);
-          const body = new URLSearchParams(params).toString();
-          
-          const targetUrl = isDev 
-            ? '/macauweb/routestation/bus' 
-            : 'https://cors-anywhere.herokuapp.com/https://bis.dsat.gov.mo:37812/macauweb/routestation/bus';
-            
-          return axios.post(targetUrl, body, {
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                    'token': token
-                }
-          }).then(res => ({ type, data: res.data })).catch(err => ({ type, error: err }));
+          return axios.post(isDev ? '/macauweb/routestation/bus' : 'https://cors-anywhere.herokuapp.com/https://bis.dsat.gov.mo:37812/macauweb/routestation/bus', 
+              new URLSearchParams(params).toString(), 
+              { 
+                  headers: { 
+                      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                      'token': token
+                  } 
+              }
+          ).then(res => ({ type, data: res.data }))
+           .catch(err => ({ type, error: err }));
       });
 
+      // Also start Traffic Fetch
+      const trafficPromise = fetchTrafficData(rNo, dir);
+
       try {
-          const results = await Promise.all(requests);
-          
-          // Find the one with header "000"
-          const validResult = results.find(r => r.data && r.data.header === "000");
+          const results = await Promise.all([...promises, trafficPromise]);
+          const trafficResult = results.pop(); // Last one is traffic
+
+          // Find successful bus result...
+          const validResult = results.find(r => r.data && r.data.header === '000');
           
           if (validResult && validResult.data && validResult.data.data && validResult.data.data.routeInfo) {
               console.log(`Found valid data with routeType=${validResult.type}`);
               const realtimeStops = validResult.data.data.routeInfo;
               
-              // Merge bus info into currentStops
-              // Match by staCode
+              // Merge bus info and traffic into currentStops
               const updatedStops = currentStops.map(stop => {
-                  const match = realtimeStops.find(rs => rs.staCode === stop.staCode);
-                  if (match && match.busInfo && match.busInfo.length > 0) {
-                      return { ...stop, buses: match.busInfo };
-                  }
-                  return { ...stop, buses: [] };
+                   const matchingStop = realtimeStops.find(rs => rs.staCode === stop.staCode);
+                   if (matchingStop) {
+                       return {
+                           ...stop,
+                           // Update Buses
+                           buses: (matchingStop.busInfo || []).map(b => ({
+                               ...b,
+                               status: b.status, // 0=Moving, 1=Arrived
+                               speed: b.speed,
+                               busPlate: b.busPlate,
+                               busType: b.busType,
+                               isFacilities: b.isFacilities,
+                               passengerFlow: b.passengerFlow
+                           })),
+                           // If traffic data has a key for this stop?
+                           trafficLevel: trafficResult[stop.staCode] || trafficResult[stop.busstopcode] || 0
+                       };
+                   }
+                   return { ...stop, buses: [], trafficLevel: trafficResult[stop.staCode] || trafficResult[stop.busstopcode] || 0 };
               });
               
               // Extract all active buses for summary
@@ -273,11 +347,24 @@ function App() {
 
                 {/* Stop List */}
                 {/* Timeline Container - Increased left margin to make room for buses on the left */}
-                <ul className="relative border-l-2 border-gray-300 ml-36 space-y-10 pb-4">
+                <ul className="relative ml-36 space-y-10 pb-4">
                   {busData.stops.map((stop, fileIndex) => (
                     <li key={stop.busstopcode || fileIndex} className="relative pl-6">
+                        
+                        {/* Timeline Line Segment (Connects to next stop) */}
+                        {fileIndex < busData.stops.length - 1 && (
+                            <div className={`absolute left-0 top-2 bottom-[-40px] w-1.5 z-0 transition-colors duration-500
+                                ${(!stop.trafficLevel || stop.trafficLevel <= 0) ? 'bg-gray-300' : ''}
+                                ${stop.trafficLevel == 1 ? 'bg-green-500' : ''}
+                                ${stop.trafficLevel == 2 ? 'bg-yellow-400' : ''}
+                                ${stop.trafficLevel >= 3 ? 'bg-red-500' : ''}
+                            `}>
+                                {/* Dashed overlay for specific statuses if needed */}
+                            </div>
+                        )}
+
                         {/* Station Dot */}
-                        <div className={`absolute -left-[9px] top-1.5 w-4 h-4 rounded-full border-2 border-white shadow-sm z-10 ${
+                        <div className={`absolute -left-[5px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm z-10 ${
                             stop.buses.some(b => b.status === '1') ? 'bg-red-500 animate-pulse' : 'bg-gray-400'
                         }`}></div>
                         

@@ -165,12 +165,103 @@ async function testMenuList() {
   }
 }
 
+async function testTraffic() {
+    console.log("\nTesting Region Traffic (routestation/route/traffic)...");
+    const route = "N2";
+    const dir = "0";
+
+    const date = new Date();
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    const min = String(date.getMinutes()).padStart(2, '0');
+    const ss = String(date.getSeconds()).padStart(2, '0');
+    const request_id = `${yyyy}${mm}${dd}${hh}${min}${ss}`;
+
+    const params = {
+        routeName: route,
+        dir: dir,
+        device: 'web',
+        lang: 'zh-tw',
+        request_id: request_id
+    };
+    
+    // Generate token using the helper (which also handles timestamp injection into the hash)
+    const token = generateDsatToken(params);
+    
+    // Create body string
+    const body = new URLSearchParams(params).toString();
+    
+    // URL provided by user
+    const url = 'https://bis.dsat.gov.mo:37812/ddbus/common/supermap/routeStation/traffic';
+    console.log(`\nTesting User Provided Endpoint: ${url}`);
+    console.log("Traffic Request Body:", body + `&token=${token}`);
+
+    try {
+        const response = await axios.post(url, body, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                'User-Agent': 'Mozilla/5.0',
+                'Referer': 'https://bis.dsat.gov.mo:37812/macauweb/',
+                'token': token
+            },
+            httpsAgent: new https.Agent({ rejectUnauthorized: false })
+        });
+        console.log("Traffic Status:", response.status);
+        console.log("Traffic Data:", JSON.stringify(response.data, null, 2));
+    } catch (e) {
+        console.error("Traffic Probe Error:", e.message);
+    }
+    
+    // Test user provided parameters exactly
+    // routeCode="000N2" -> "000" + route?
+    // direction="0"
+    // HUID and categoryIds
+    
+    const extendedParams = {
+        device: 'web',
+        HUID: 'ddc052eb-c185-477a-b40a-a4dbbd3ebae2',
+        routeCode: '000' + route, // Try padding
+        direction: dir,
+        indexType: '00',
+        lang: 'zh_tw', // underscore in user url
+        categoryIds: 'BCAFBD938B8D48B0B3F598B44DD32E6C'
+    };
+    
+    console.log("Testing with Extended Params (GET):", extendedParams);
+    
+    try {
+        const qs = new URLSearchParams(extendedParams).toString();
+        const url = `https://bis.dsat.gov.mo:37812/ddbus/common/supermap/routeStation/traffic?${qs}`;
+        
+        // Try GET first as the user provided a URL string
+        const response = await axios.get(url, {
+             headers: {
+                'User-Agent': 'Mozilla/5.0',
+                'Referer': 'https://bis.dsat.gov.mo:37812/macauweb/'
+            },
+            httpsAgent: new https.Agent({ rejectUnauthorized: false })
+        });
+        
+        console.log("Extended Params Status:", response.status);
+        console.log("Extended Params Data:", JSON.stringify(response.data, null, 2));
+
+    } catch (e) {
+        console.error("Extended Params Failed:", e.message);
+        if (e.response) console.error("Error Data:", e.response.data);
+    }
+}
+
 async function run() {
     // Confirm 33 works with type 2
-    await testRealtimeBus("33", "0", "2"); 
-    
-    // Check Menu List for type mapping
-    await testMenuList();
+   // Run the test
+// 33 is Day, N2 is Night (RouteType=0)
+// await testRealtimeBus('N2', '0', '0');
+// testRealtimeBus('33', '0', '2'); for type mapping
+    // await testMenuList();
+
+    await testTraffic();
 }
 
 run();

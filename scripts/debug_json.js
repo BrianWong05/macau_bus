@@ -63,10 +63,12 @@ async function testJsonApi(routeNo, dir) {
     console.log("Status:", response.status);
     const data = response.data.data;
     if (data && data.routeInfo && data.routeInfo.length > 0) {
+        console.log("First Stop Object Keys:", Object.keys(data.routeInfo[0]));
         console.log("First Stop Object:", JSON.stringify(data.routeInfo[0], null, 2));
-        // Check specific fields
-        const firstStop = data.routeInfo[0];
-        console.log("Lane Name for first stop:", firstStop.laneName);
+        // Check for anything that looks like traffic
+        data.routeInfo.forEach((stop, i) => {
+            if (i < 5) console.log(`Stop ${i}:`, stop);
+        });
     } else {
         console.log("Data or routeInfo is null/empty");
     }
