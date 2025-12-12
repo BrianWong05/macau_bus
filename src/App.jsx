@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import md5 from 'js-md5';
+import jsMd5 from 'js-md5';
+import MapComponent from './components/MapComponent';
 
 function App() {
   const [routeNo, setRouteNo] = useState('');
@@ -9,6 +10,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [hasOppositeDirection, setHasOppositeDirection] = useState(true); // Default true until checked
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
+  const [mapBuses, setMapBuses] = useState([]); // Buses for Map View (lat/lon)
 
   const isDev = import.meta.env.DEV;
 
@@ -19,7 +22,7 @@ function App() {
         queryString += (index === 0 ? "" : "&") + key + "=" + params[key];
     });
     
-    const dirtyHash = md5(queryString);
+    const dirtyHash = jsMd5(queryString);
     const date = new Date();
     const pad = (n) => n.toString().padStart(2, '0');
     const YYYY = date.getFullYear();
@@ -56,8 +59,7 @@ function App() {
             routeName: rNo,
             dir: dir,
             lang: 'zh-tw',
-            device: 'web',
-            request_id: request_id 
+            device: 'web'
         };
 
         const token = generateDsatToken(params);
@@ -284,6 +286,55 @@ function App() {
       }
   };
 
+  const fetchBusLocation = async (rNo, dir) => {
+      try {
+        const date = new Date();
+        const yyyy = date.getFullYear();
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const dd = String(date.getDate()).padStart(2, '0');
+        const hh = String(date.getHours()).padStart(2, '0');
+        const min = String(date.getMinutes()).padStart(2, '0');
+        const ss = String(date.getSeconds()).padStart(2, '0');
+        const request_id = `${yyyy}${mm}${dd}${hh}${min}${ss}`;
+
+        // Note: routeCode usually needs 0 prefix if length < 5? 33 -> 00033
+        // But let's rely on standard logic.
+        const routeCode = rNo.length === 2 ? '000' + rNo : (rNo.length === 3 ? '00' + rNo : rNo);
+
+        const params = {
+            routeCode: routeCode,
+            dir: dir,
+            device: 'web',
+            request_id: request_id
+        };
+
+        const token = generateDsatToken(params);
+        
+        console.log("Fetching Map Location for:", routeCode, dir);
+
+        const res = await axios.post(isDev ? '/macauweb/routestation/location' : 'https://cors-anywhere.herokuapp.com/https://bis.dsat.gov.mo:37812/macauweb/routestation/location',
+            new URLSearchParams(params).toString(),
+            {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'token': token
+                }
+            }
+        );
+
+        if (res.data && res.data.data && res.data.data.length > 0) {
+            console.log("Map Bus Locations found:", res.data.data);
+            setMapBuses(res.data.data);
+        } else {
+             console.log("No bus locations found (or empty).");
+             setMapBuses([]);
+        }
+
+      } catch (e) {
+          console.error("Map Bus Fetch Error:", e);
+      }
+  };
+
   const toggleDirection = async () => {
       const newDir = direction === '0' ? '1' : '0';
       setDirection(newDir);
@@ -319,14 +370,26 @@ function App() {
   useEffect(() => {
       let interval;
       if (busData && routeNo) {
+          // Immediate fetch on switch
+          if (viewMode === 'map') {
+              fetchBusLocation(routeNo, direction);
+          } else {
+             // list view update
+             fetchRealtimeBus(routeNo, direction, busData.stops);
+          }
+
           interval = setInterval(() => {
-              console.log("Auto-refreshing data...");
-              // Pass current stops so we don't lose structure, but update content
-              fetchRealtimeBus(routeNo, direction, busData.stops);
+              console.log(`Auto-refreshing data (${viewMode})...`);
+              if (viewMode === 'map') {
+                  fetchBusLocation(routeNo, direction);
+              } else {
+                  // Pass current stops so we don't lose structure, but update content
+                  fetchRealtimeBus(routeNo, direction, busData.stops);
+              }
           }, 5000);
       }
       return () => clearInterval(interval);
-  }, [busData, routeNo, direction]); // Dependency on busData ensures we wait 5s after EACH update (preventing overlap)
+  }, [busData, routeNo, direction, viewMode]); // Added viewMode dependency
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 font-sans">
@@ -352,7 +415,7 @@ function App() {
 
         {/* Direction Toggle - Hidden if no opposite direction or no data */}
         {busData && hasOppositeDirection && (
-            <div className="flex justify-center mb-4">
+            <div className="flex justify-center mb-4 gap-4">
                 <button 
                     onClick={toggleDirection}
                     className="text-sm text-teal-600 underline"
@@ -362,8 +425,28 @@ function App() {
             </div>
         )}
 
-        {/* Refresh Button */}
+        {/* View Toggle (List | Map) */}
         {busData && (
+             <div className="flex justify-center mb-4">
+                <div className="bg-gray-200 p-1 rounded-lg flex">
+                    <button
+                        onClick={() => setViewMode('list')}
+                        className={`px-4 py-1 rounded-md text-sm transition ${viewMode === 'list' ? 'bg-white shadow text-teal-600 font-bold' : 'text-gray-500'}`}
+                    >
+                        List
+                    </button>
+                    <button
+                        onClick={() => setViewMode('map')}
+                        className={`px-4 py-1 rounded-md text-sm transition ${viewMode === 'map' ? 'bg-white shadow text-teal-600 font-bold' : 'text-gray-500'}`}
+                    >
+                        Map
+                    </button>
+                </div>
+             </div>
+        )}
+
+        {/* Refresh Button - Only for List View? Or both? */}
+        {busData && viewMode === 'list' && (
            <div className="flex justify-end mb-2">
              <button 
                onClick={() => fetchRealtimeBus(routeNo, direction, busData.stops)}
@@ -406,122 +489,137 @@ function App() {
                     </div>
                 )}
 
-                {/* Stop List */}
-                {/* Timeline Container - Increased left margin to make room for buses on the left */}
-                <ul className="relative ml-36 space-y-10 pb-4">
-                  {busData.stops.map((stop, fileIndex) => (
-                    <li key={stop.busstopcode || fileIndex} className="relative pl-6">
-                        
-                        {/* Timeline Line Segment (Connects to next stop) */}
-                        {fileIndex < busData.stops.length - 1 && (
-                            <div className={`absolute left-0 top-2 bottom-[-40px] w-1.5 z-0 transition-colors duration-500
-                                ${(!stop.trafficLevel || stop.trafficLevel <= 0) ? 'bg-gray-300' : ''}
-                                ${stop.trafficLevel == 1 ? 'bg-green-500' : ''}
-                                ${stop.trafficLevel == 2 ? 'bg-yellow-400' : ''}
-                                ${stop.trafficLevel >= 3 ? 'bg-red-500' : ''}
-                            `}>
-                                {/* Dashed overlay for specific statuses if needed */}
-                            </div>
-                        )}
+                {/* Stops List (Timeline) */}
+                {busData && viewMode === 'list' && (
+                    <div className="relative pl-4 border-l-2 border-gray-200 ml-4 space-y-8 pb-10">
+                        {busData.stops.map((stop, index) => (
+                            <div key={stop.busstopcode || index} className="relative">
+                                {/* Timeline Line Segment (Connects to next stop) */}
+                                {index < busData.stops.length - 1 && (
+                                    <div className={`absolute left-0 top-2 bottom-[-40px] w-1.5 z-0 transition-colors duration-500
+                                        ${(!stop.trafficLevel || stop.trafficLevel <= 0) ? 'bg-gray-300' : ''}
+                                        ${stop.trafficLevel == 1 ? 'bg-green-500' : ''}
+                                        ${stop.trafficLevel == 2 ? 'bg-yellow-400' : ''}
+                                        ${stop.trafficLevel >= 3 ? 'bg-red-500' : ''}
+                                    `}>
+                                    </div>
+                                )}
+                                
+                                {/* Stop Dot */}
+                                <div className={`absolute -left-[21px] top-1 w-3 h-3 rounded-full border-2 ${
+                                    stop.buses.some(b => b.status === '1') 
+                                    ? 'bg-blue-500 border-blue-500 animate-pulse'
+                                    : stop.trafficLevel >= 3 
+                                      ? 'bg-white border-red-500' 
+                                      : stop.trafficLevel === 2 
+                                        ? 'bg-white border-yellow-500' 
+                                        : stop.trafficLevel === 1
+                                          ? 'bg-white border-green-500'
+                                          : 'bg-white border-gray-300'
+                                }`}></div>
+                                
+                                {/* Arrived Buses (Status 1) */}
+                                {stop.buses.filter(b => b.status === '1').length > 0 && (
+                                     <div className="absolute top-0 -left-36 w-32 flex flex-col items-end gap-1 z-20 transform -translate-y-1">
+                                        {stop.buses.filter(b => b.status === '1').map((bus, bi) => (
+                                            <div key={bi} className="flex flex-col items-end gap-1 z-20 w-full">
+                                                <div className="bg-white border border-blue-500 text-blue-700 text-xs px-2 py-1 rounded-full shadow-sm flex items-center justify-end gap-1 whitespace-nowrap w-full">
+                                                    <span className="font-bold">{bus.busPlate}</span>
+                                                    <span>🚌</span>
+                                                    <span className="text-[10px] font-medium border-l border-blue-200 pl-1 ml-0.5">
+                                                        {bus.speed}km/h
+                                                    </span>
+                                                </div>
+                                                <div className="flex gap-1 justify-end w-full flex-wrap">
+                                                    {bus.busType && (
+                                                        <div className="text-[9px] bg-blue-100 text-blue-800 border border-blue-200 px-1.5 rounded-full shadow-sm whitespace-nowrap">
+                                                            {getBusTypeLabel(bus.busType)}
+                                                        </div>
+                                                    )}
+                                                    {bus.isFacilities === '1' && (
+                                                        <div className="text-[9px] bg-blue-100 text-blue-800 border border-blue-200 px-1 rounded-full shadow-sm" title="Wheelchair Accessible">
+                                                            ♿
+                                                        </div>
+                                                    )}
+                                                    {parseInt(bus.passengerFlow) > -1 && (
+                                                        <div className="text-[9px] bg-purple-100 text-purple-800 border border-purple-200 px-1.5 rounded-full shadow-sm whitespace-nowrap">
+                                                            👤 {bus.passengerFlow}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                     </div>
+                                )}
+                                
+                                 {/* Stop Name & Code */}
+                                <div className="pl-4"> 
+                                    <div className="font-bold text-gray-800 text-sm leading-none">{index + 1}. {stop.staName}</div>
+                                    <div className="text-xs text-gray-400 mt-1 flex gap-2 items-center">
+                                        <span>{stop.staCode}</span>
+                                        {stop.laneName && <span className="text-teal-600 bg-teal-50 px-1 rounded border border-teal-100">{stop.laneName}</span>}
+                                    </div>
+                                     {/* Traffic Status Text (Debug/Optional) */}
+                                    {/* stop.trafficLevel > 0 && (
+                                        <div className="text-[10px] text-gray-400 mt-0.5">
+                                            Traffic: {stop.trafficLevel === 1 ? 'Smooth' : stop.trafficLevel === 2 ? 'Slow' : 'Congested'}
+                                        </div>
+                                    ) */}
+                                </div>
 
-                        {/* Station Dot */}
-                        <div className={`absolute -left-[5px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm z-10 ${
-                            stop.buses.some(b => b.status === '1') ? 'bg-blue-500 animate-pulse' : 'bg-gray-400'
-                        }`}></div>
-                        
-                        {/* 
-                            Arrived Buses (Status 1)
-                            Positioned to the LEFT of the timeline (Line is at left:0)
-                            We put them e.g. -left-20 to sit in the whitespace.
-                        */}
-                        {stop.buses.filter(b => b.status === '1').length > 0 && (
-                             <div className="absolute top-0 -left-36 w-32 flex flex-col items-end gap-1 z-20 transform -translate-y-1">
-                                {stop.buses.filter(b => b.status === '1').map((bus, bi) => (
-                                    <div key={bi} className="flex flex-col items-end gap-1 z-20 w-full">
-                                        {/* Plate Pill - Styled to match Moving Bus (White with Blue Border) */}
-                                        <div className="bg-white border border-blue-500 text-blue-700 text-xs px-2 py-1 rounded-full shadow-sm flex items-center justify-end gap-1 whitespace-nowrap w-full">
-                                            <span className="font-bold">{bus.busPlate}</span>
-                                            <span>🚌</span>
-                                            <span className="text-[10px] font-medium border-l border-blue-200 pl-1 ml-0.5">
-                                                {bus.speed}km/h
-                                            </span>
+                                {/* Moving Buses (Status 0) */}
+                                {stop.buses.filter(b => b.status === '0').map((bus, bi) => (
+                                    <div key={bi} className="absolute top-10 -left-36 w-32 flex justify-end z-0 transform -translate-y-1/2">
+                                        <div className="flex flex-col items-end gap-1 w-full">
+                                             {/* Bus Pill with Speed */}
+                                             {/* Removed overflow-hidden to allow full width display if needed, but flex wrap helps */}
+                                            <div className="bg-white border border-teal-500 text-teal-700 text-xs px-2 py-1 rounded-full shadow-sm flex items-center justify-end gap-0.5 whitespace-nowrap w-full">
+                                                <span className="font-bold">{bus.busPlate}</span>
+                                                <span>🚌</span>
+                                                <span className="text-[10px] font-medium border-l border-teal-200 pl-1 ml-0.5">
+                                                   {bus.speed}km/h
+                                                </span>
+                                            </div>
+
+                                            {/* Additional Badges Row */}
+                                            <div className="flex gap-1 justify-end w-full flex-wrap">
+                                                {/* Bus Type Badge */}
+                                                {bus.busType && (
+                                                    <div className="text-[9px] bg-teal-50 text-teal-800 border border-teal-200 px-1.5 rounded-full shadow-sm whitespace-nowrap">
+                                                        {getBusTypeLabel(bus.busType)}
+                                                    </div>
+                                                )}
+                                                 {/* Wheelchair Badge */}
+                                                {bus.isFacilities === '1' && (
+                                                    <div className="text-[9px] bg-teal-50 text-teal-800 border border-teal-200 px-1 rounded-full shadow-sm" title="Wheelchair Accessible">
+                                                        ♿
+                                                    </div>
+                                                )}
+                                                {/* Passenger Flow Badge */}
+                                                {parseInt(bus.passengerFlow) > -1 && (
+                                                    <div className="text-[9px] bg-purple-50 text-purple-800 border border-purple-200 px-1.5 rounded-full shadow-sm whitespace-nowrap">
+                                                        👤 {bus.passengerFlow}
+                                                    </div>
+                                                )}
+                                            </div>
+
                                         </div>
-                                        {/* Bus Type for Arrived */}
-                                        <div className="flex gap-1 justify-end w-full flex-wrap">
-                                            {bus.busType && (
-                                                <div className="text-[9px] bg-blue-100 text-blue-800 border border-blue-200 px-1.5 rounded-full shadow-sm whitespace-nowrap">
-                                                    {getBusTypeLabel(bus.busType)}
-                                                </div>
-                                            )}
-                                            {bus.isFacilities === '1' && (
-                                                <div className="text-[9px] bg-blue-100 text-blue-800 border border-blue-200 px-1 rounded-full shadow-sm" title="Wheelchair Accessible">
-                                                    ♿
-                                                </div>
-                                            )}
-                                            {parseInt(bus.passengerFlow) > -1 && (
-                                                <div className="text-[9px] bg-purple-100 text-purple-800 border border-purple-200 px-1.5 rounded-full shadow-sm whitespace-nowrap">
-                                                    👤 {bus.passengerFlow}
-                                                </div>
-                                            )}
-                                        </div>
+                                        {/* Connector Line to Timeline */}
+                                        <div className="absolute right-[-18px] top-1/2 w-4 h-[2px] bg-teal-300"></div>
                                     </div>
                                 ))}
-                             </div>
-                        )}
-
-                        {/* Stop Info */}
-                        <div className={`flex flex-col items-start transition-all`}>
-                             <div className="text-sm font-bold text-gray-800">{orderIndex(fileIndex)} {stop.staName}</div>
-                             <div className="text-xs text-gray-400 flex gap-1">
-                                <span>{stop.staCode}</span>
-                                {stop.laneName && <span className="text-teal-600 bg-teal-50 px-1 rounded border border-teal-100">{stop.laneName}</span>}
-                             </div>
-                        </div>
-
-
-                        {/* 
-                            Moving Buses (Status 0)
-                            Positioned BETWEEN stops, LEFT of the line.
-                            Roughly centered between this and prev stop (visually above).
-                        */}
-                        {stop.buses.filter(b => b.status === '0').map((bus, bi) => (
-                            <div key={bi} className="absolute top-10 -left-36 w-32 flex justify-end z-0 transform -translate-y-1/2">
-                                <div className="flex flex-col items-end gap-1 w-full">
-                                     {/* Bus Pill with Speed */}
-                                     {/* Removed overflow-hidden to allow full width display if needed, but flex wrap helps */}
-                                     <div className="bg-white border border-teal-500 text-teal-700 text-xs px-2 py-1 rounded-full shadow-sm flex items-center justify-end gap-1 whitespace-nowrap w-full">
-                                         <span className="font-bold">{bus.busPlate}</span>
-                                         <span>🚌</span>
-                                         <span className="text-[10px] font-medium border-l border-teal-200 pl-1 ml-0.5">
-                                            {bus.speed > 0 ? `${bus.speed}km/h` : ''}
-                                         </span>
-                                     </div>
-                                     
-                                     {/* Bus Type Label for Moving */}
-                                     {/* Row for indicators */}
-                                     <div className="flex gap-1 justify-end">
-                                         {bus.busType && (
-                                             <div className="text-[9px] bg-teal-100 text-teal-800 border border-teal-200 px-1.5 rounded-full shadow-sm">
-                                                 {getBusTypeLabel(bus.busType)}
-                                             </div>
-                                         )}
-                                        {bus.isFacilities === '1' && (
-                                            <div className="text-[9px] bg-blue-100 text-blue-800 border border-blue-200 px-1 rounded-full shadow-sm" title="Wheelchair Accessible">
-                                                ♿
-                                            </div>
-                                        )}
-                                        {parseInt(bus.passengerFlow) > -1 && (
-                                            <div className="text-[9px] bg-purple-100 text-purple-800 border border-purple-200 px-1.5 rounded-full shadow-sm">
-                                                👤 {bus.passengerFlow}
-                                            </div>
-                                        )}
-                                     </div>
-                                </div>
                             </div>
                         ))}
-                    </li>
-                  ))}
-                </ul>
+                    </div>
+                )}
+
+        {/* Map View */}
+        {busData && viewMode === 'map' && (
+            <MapComponent 
+                stations={busData.stops} 
+                buses={mapBuses} 
+            />
+        )}
              </div>
           </div>
         )}
