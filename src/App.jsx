@@ -14,7 +14,8 @@ function App() {
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
   const [mapBuses, setMapBuses] = useState([]); // Buses for Map View (lat/lon)
   const [trafficData, setTrafficData] = useState([]); // Traffic Info (Array of Segments)
-  
+  const [lastUpdated, setLastUpdated] = useState(null); // Last successful fetch time
+
   // Ref to track active route for preventing race conditions (async fetches returning after route switch)
   const activeRouteRef = useRef('');
 
@@ -349,7 +350,11 @@ function App() {
       const token = generateDsatToken(params);
 
       try {
-        const res = await axios.post(isDev ? '/macauweb/routestation/location' : 'https://cors-anywhere.herokuapp.com/https://bis.dsat.gov.mo:37812/macauweb/routestation/location',
+        const url = isDev ? '/macauweb/routestation/location' : 'https://cors-anywhere.herokuapp.com/https://bis.dsat.gov.mo:37812/macauweb/routestation/location';
+        // Add cache buster to URL
+        const finalUrl = `${url}?t=${Date.now()}`;
+
+        const res = await axios.post(finalUrl,
             new URLSearchParams(params).toString(),
             {
                 headers: {
@@ -366,10 +371,15 @@ function App() {
             console.log(`Ignoring stale Map result for ${rNo}`);
             return;
         }
+        
+        setLastUpdated(new Date()); // Update timestamp
 
-        if (res.data && res.data.data && res.data.data.busInfoList && res.data.data.busInfoList.length > 0) {
-            // console.log("Map Bus Locations found:", res.data.data.busInfoList);
-            setMapBuses(res.data.data.busInfoList);
+        // Check both nesting levels (res.data.busInfoList vs res.data.data.busInfoList)
+        const busList = res.data.busInfoList || (res.data.data && res.data.data.busInfoList);
+
+        if (busList && busList.length > 0) {
+            console.log("Map GPS Buses found:", busList.length);
+            setMapBuses(busList);
         } else {
              // console.log("Location API empty (or no buses). Trying List API fallback...");
              
@@ -394,10 +404,19 @@ function App() {
 
                 if (busRes.data && busRes.data.data && busRes.data.data.routeInfo) {
                     let allBuses = [];
+                    
                     busRes.data.data.routeInfo.forEach(stop => {
-                        if (stop.busInfo) allBuses = [...allBuses, ...stop.busInfo];
+                        if (stop.busInfo) {
+                            // Inject staCode so MapComponent can hydrate location
+                            const busesAtStop = stop.busInfo.map(b => ({
+                                ...b,
+                                staCode: stop.staCode
+                            }));
+                            allBuses = [...allBuses, ...busesAtStop];
+                        }
                     });
-                    console.log("Fallback Buses found:", allBuses);
+
+                    console.log("Fallback Buses found (with staCode):", allBuses);
                     setMapBuses(allBuses); 
                 } else {
                     setMapBuses([]);
@@ -477,10 +496,19 @@ function App() {
                   // Pass current stops so we don't lose structure, but update content
                   fetchRealtimeBus(activeRoute, direction, busData.stops);
                }
-          }, 5000);
+          }, 1000); // 1-second refresh
       }
       return () => clearInterval(interval);
   }, [busData, activeRoute, direction, viewMode]); // Added activeRoute dependency
+
+  // Debug: Monitor Map Buses
+  useEffect(() => {
+    if (viewMode === 'map' && mapBuses.length > 0) {
+        // console.log("Current Map Buses State:", mapBuses);
+        const coords = mapBuses.map(b => `${b.busPlate}: ${b.latitude}, ${b.longitude} (Speed: ${b.speed})`);
+        console.log("Bus Locations Update:", coords);
+    }
+  }, [mapBuses, viewMode]);
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 font-sans">
@@ -536,11 +564,17 @@ function App() {
              </div>
         )}
 
-        {/* Refresh Button - Only for List View? Or both? */}
-        {busData && viewMode === 'list' && (
-           <div className="flex justify-end mb-2">
+        {/* Refresh Button & Timestamp */}
+        {busData && (
+           <div className="flex justify-between items-center mb-2 px-2">
+             <div className="text-xs text-gray-400">
+                {lastUpdated ? `Updated: ${lastUpdated.toLocaleTimeString()}` : ''}
+             </div>
              <button 
-               onClick={() => fetchRealtimeBus(activeRoute, direction, busData.stops)}
+               onClick={() => {
+                   if (viewMode === 'map') fetchBusLocation(activeRoute, direction);
+                   else fetchRealtimeBus(activeRoute, direction, busData.stops);
+               }}
                className="text-gray-500 text-sm flex items-center gap-1 hover:text-teal-600"
              >
                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -576,7 +610,11 @@ function App() {
                     </div>
                 ) : (
                     <div className="bg-yellow-50 p-2 rounded mb-2 text-sm text-yellow-800">
-                        No active buses found (or API restriction).
+                        {mapBuses.some(b => b.staCode) ? (
+                            <span>⚠️ GPS Signal Weak. Tracking via Station Updates (Approximate Location).</span>
+                        ) : (
+                            <span>No active buses found (or GPS API restriction).</span>
+                        )}
                     </div>
                 )}
 

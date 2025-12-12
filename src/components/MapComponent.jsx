@@ -30,15 +30,17 @@ const FitBounds = ({ stations, buses }) => {
     const hasFitRef = React.useRef(false);
 
     useEffect(() => {
-        // Filter stations with valid coordinates (if any)
+        // Filter stations with valid coordinates (if any). Stations usually have latitude/longitude normalized by now.
         const validStations = stations ? stations.filter(s => s.latitude && s.longitude) : [];
-        const validBuses = buses ? buses.filter(b => b.latitude && b.longitude) : [];
+        
+        // Buses: Normalize check
+        const validBuses = buses ? buses.filter(b => (b.latitude || b.lat) && (b.longitude || b.lon || b.lng)) : [];
 
         // Only fit bounds if we haven't done so yet, and we have valid stations (or buses as fallback)
         if (!hasFitRef.current && (validStations.length > 0 || validBuses.length > 0)) {
             const bounds = L.latLngBounds();
             validStations.forEach(s => bounds.extend([s.latitude, s.longitude]));
-            validBuses.forEach(b => bounds.extend([b.latitude, b.longitude]));
+            validBuses.forEach(b => bounds.extend([b.latitude || b.lat, b.longitude || b.lon || b.lng]));
             if (bounds.isValid()) {
                 map.fitBounds(bounds, { padding: [20, 20] });
                 hasFitRef.current = true; // Mark as fitted
@@ -123,11 +125,25 @@ const MapComponent = ({ stations, buses, traffic }) => {
         })}
 
         {/* Real-time Buses */}
-        {buses.map((bus, idx) => (
-            bus.latitude && bus.longitude && (
+        {buses.map((bus, idx) => {
+            let lat = parseFloat(bus.latitude || bus.lat);
+            let lon = parseFloat(bus.longitude || bus.lon || bus.lng);
+            
+            // Fallback Hydration: If GPS is missing, use Station Coords
+            if ((isNaN(lat) || isNaN(lon)) && bus.staCode) {
+                 const matchStation = hydratedStations.find(s => s.staCode === bus.staCode);
+                 if (matchStation && matchStation.latitude && matchStation.longitude) {
+                     lat = parseFloat(matchStation.latitude);
+                     lon = parseFloat(matchStation.longitude);
+                 }
+            }
+
+            if (isNaN(lat) || isNaN(lon)) return null;
+
+            return (
             <Marker 
-                key={`bus-${idx}`}
-                position={[bus.latitude, bus.longitude]}
+                key={bus.busPlate || `bus-${idx}`}
+                position={[lat, lon]}
                 icon={createBusIcon(0)} 
                 zIndexOffset={1000} // Buses on top
             >
@@ -138,8 +154,8 @@ const MapComponent = ({ stations, buses, traffic }) => {
                     </div>
                 </Popup>
             </Marker>
-            )
-        ))}
+            );
+        })}
 
         <FitBounds key={stations ? stations.length : 'empty'} stations={hydratedStations} buses={buses} />
       </MapContainer>

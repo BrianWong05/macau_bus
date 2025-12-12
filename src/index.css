@@ -6,4 +6,15 @@ body {
   margin: 0;
   padding: 0;
   background-color: #f9fafb;
+  background-color: #f9fafb;
+}
+
+/* Fallback style for bus icons if custom styling fails to load or Leaflet strips styles */
+.bus-marker-icon {
+  width: 30px !important;
+  height: 30px !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  /* Ensure it has dimension */
 }
