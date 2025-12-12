@@ -11,12 +11,24 @@ export default defineConfig({
         changeOrigin: true,
         secure: false, // Ignore SSL issues
         rewrite: (path) => path,
+        configure: (proxy, options) => {
+            proxy.on('proxyReq', (proxyReq, req, res) => {
+                proxyReq.setHeader('Referer', 'https://bis.dsat.gov.mo:37812/macauweb/map.html');
+                proxyReq.setHeader('Origin', 'https://bis.dsat.gov.mo:37812');
+            });
+        },
       },
       '/ddbus': {
         target: 'https://bis.dsat.gov.mo:37812',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path,
+        configure: (proxy, options) => {
+            proxy.on('proxyReq', (proxyReq, req, res) => {
+                proxyReq.setHeader('Referer', 'https://bis.dsat.gov.mo:37812/macauweb/map.html');
+                proxyReq.setHeader('Origin', 'https://bis.dsat.gov.mo:37812');
+            });
+        },
       },
     },
   },

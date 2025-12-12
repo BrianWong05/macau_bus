@@ -175,7 +175,9 @@ function App() {
              {
                  headers: {
                     'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                    'token': token
+                    'token': token,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json, text/javascript, */*; q=0.01'
                  }
              }
         );
@@ -329,40 +331,47 @@ function App() {
             {
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                    'token': token
+                    'token': token,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json, text/javascript, */*; q=0.01'
                 }
             }
         );
 
-        if (res.data && res.data.data && res.data.data.length > 0) {
-            console.log("Map Bus Locations found:", res.data.data);
-            setMapBuses(res.data.data);
+        if (res.data && res.data.data && res.data.data.busInfoList && res.data.data.busInfoList.length > 0) {
+            console.log("Map Bus Locations found:", res.data.data.busInfoList);
+            setMapBuses(res.data.data.busInfoList);
         } else {
-             console.log("Location API empty. Trying List API fallback...");
+             console.log("Location API empty (or no buses). Trying List API fallback...");
              
              // Define routeCodeRaw for fallback (routestation/bus expects raw "33")
              const routeCodeRaw = rNo.replace(/^0+/, ''); 
 
-             const busParams = {
-                action: 'dy',
-                routeName: routeCodeRaw,
-                dir: dir,
-                lang: 'zh-tw',
-                device: 'web'
-             };
-             const busToken = generateDsatToken(busParams);
-             const busRes = await axios.post(isDev ? '/macauweb/routestation/bus' : 'https://cors-anywhere.herokuapp.com/https://bis.dsat.gov.mo:37812/macauweb/routestation/bus',
-                new URLSearchParams(busParams).toString(),
-                { headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'token': busToken } }
-             );
-             if (busRes.data && busRes.data.data && busRes.data.data.routeInfo) {
-                 let allBuses = [];
-                 busRes.data.data.routeInfo.forEach(stop => {
-                     if (stop.busInfo) allBuses = [...allBuses, ...stop.busInfo];
-                 });
-                 console.log("Fallback Buses found:", allBuses);
-                 setMapBuses(allBuses); 
-             } else {
+             try {
+                const busParams = {
+                    action: 'dy',
+                    routeName: routeCodeRaw,
+                    dir: dir,
+                    lang: 'zh-tw',
+                    device: 'web'
+                };
+                const busToken = generateDsatToken(busParams);
+                const busRes = await axios.post(isDev ? '/macauweb/routestation/bus' : 'https://cors-anywhere.herokuapp.com/https://bis.dsat.gov.mo:37812/macauweb/routestation/bus',
+                    new URLSearchParams(busParams).toString(),
+                    { headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'token': busToken } }
+                );
+                if (busRes.data && busRes.data.data && busRes.data.data.routeInfo) {
+                    let allBuses = [];
+                    busRes.data.data.routeInfo.forEach(stop => {
+                        if (stop.busInfo) allBuses = [...allBuses, ...stop.busInfo];
+                    });
+                    console.log("Fallback Buses found:", allBuses);
+                    setMapBuses(allBuses); 
+                } else {
+                    setMapBuses([]);
+                }
+             } catch (fallbackErr) {
+                 console.log("Fallback API failed:", fallbackErr);
                  setMapBuses([]);
              }
         }
