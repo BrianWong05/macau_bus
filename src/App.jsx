@@ -4,7 +4,8 @@ import jsMd5 from 'js-md5';
 import MapComponent from './components/MapComponent';
 
 function App() {
-  const [routeNo, setRouteNo] = useState('');
+  const [routeNo, setRouteNo] = useState(''); // Input value
+  const [activeRoute, setActiveRoute] = useState(''); // Actual confirmed route for fetching
   const [direction, setDirection] = useState('0'); // '0' or '1'
   const [busData, setBusData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -13,6 +14,13 @@ function App() {
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
   const [mapBuses, setMapBuses] = useState([]); // Buses for Map View (lat/lon)
   const [trafficData, setTrafficData] = useState([]); // Traffic Info (Array of Segments)
+  
+  // Ref to track active route for preventing race conditions (async fetches returning after route switch)
+  const activeRouteRef = useRef('');
+
+  useEffect(() => {
+      activeRouteRef.current = activeRoute;
+  }, [activeRoute]);
 
   const isDev = import.meta.env.DEV;
 
@@ -45,7 +53,7 @@ function App() {
     return arr.join("");
   };
 
-  // Helper function to fetch route data for probing
+  // Helper function to fetch route data
   const fetchRouteDataInternal = async (rNo, dir) => {
         const date = new Date();
         const yyyy = date.getFullYear();
@@ -54,7 +62,7 @@ function App() {
         const hh = String(date.getHours()).padStart(2, '0');
         const min = String(date.getMinutes()).padStart(2, '0');
         const ss = String(date.getSeconds()).padStart(2, '0');
-        const request_id = `${yyyy}${mm}${dd}${hh}${min}${ss}`;
+        // const request_id = `${yyyy}${mm}${dd}${hh}${min}${ss}`;
 
         const params = {
             routeName: rNo,
@@ -88,51 +96,57 @@ function App() {
     if (!routeNo) return;
     setLoading(true);
     setError('');
+    setActiveRoute(routeNo); // Set active route ONLY on search
+    activeRouteRef.current = routeNo; // Sync ref immediately
     setBusData(null);
-    setHasOppositeDirection(false); // Default false, enable only if probe succeeds
+    setMapBuses([]); 
+    setTrafficData([]);
+    setHasOppositeDirection(false); 
 
     try {
         console.log(`Searching for Route: ${routeNo}, Dir: ${direction}`);
         
         // 1. Fetch Route Stops (JSON API) using helper
         const data = await fetchRouteDataInternal(routeNo, direction);
+        
+        // Guard: If user switched route while fetching, ignore result
+        if (activeRouteRef.current !== routeNo) return;
 
         if (data && data.data && data.data.routeInfo && data.data.routeInfo.length > 0) {
              const stops = data.data.routeInfo;
-             const routeName = data.data.routeCode; // e.g., 00033
+             // ...
              
              // Initial bus load
              fetchRealtimeBus(routeNo, direction, stops);
 
-             // 2. Probe Opposite Direction for UI Toggle
+             // 2. Probe Opposite Direction
              const oppositeDir = direction === '0' ? '1' : '0';
-             console.log(`Probing opposite direction: ${oppositeDir}`);
              try {
-                 const oppositeData = await fetchRouteDataInternal(routeNo, oppositeDir);
-                 if (oppositeData && oppositeData.data && oppositeData.data.routeInfo && oppositeData.data.routeInfo.length > 0) {
-                     console.log("Opposite direction exists.");
-                     setHasOppositeDirection(true);
-                 } else {
-                     console.log("Opposite direction empty/invalid.");
-                     setHasOppositeDirection(false);
-                 }
-            } catch (probeError) {
-                 console.log("Opposite direction probe failed:", probeError);
-                 setHasOppositeDirection(false);
+                // ...
+                  const oppositeData = await fetchRouteDataInternal(routeNo, oppositeDir);
+                  if (oppositeData && oppositeData.data && oppositeData.data.routeInfo && oppositeData.data.routeInfo.length > 0) {
+                      if (activeRouteRef.current === routeNo) setHasOppositeDirection(true);
+                  } else {
+                      if (activeRouteRef.current === routeNo) setHasOppositeDirection(false);
+                  }
+             } catch (probeError) {
+                  console.log("Opposite direction probe failed:", probeError);
+                  if (activeRouteRef.current === routeNo) setHasOppositeDirection(false);
              }
 
         } else {
             setError("Route not found or empty data.");
         }
 
+
     } catch (err) {
         console.error("Search Error:", err);
         setError(err.message || "Failed to fetch route data");
     } finally {
-        setLoading(false);
+        if (activeRouteRef.current === routeNo) setLoading(false);
     }
   };
-
+  
   // Helper to map busType
   const getBusTypeLabel = (type) => {
       switch(type) {
@@ -147,7 +161,8 @@ function App() {
   // https://bis.dsat.gov.mo:37812/ddbus/common/supermap/route/traffic
   const fetchTrafficData = async (rNoRaw, dir) => {
     try {
-        const routeCodePadded = '000' + rNoRaw; // e.g. 00033
+        // Fix (Final): Use proper 5-digit padding. 1->00001
+        const routeCodePadded = rNoRaw.toString().padStart(5, '0'); 
         
         const params = {
             lang: 'zh_tw', 
@@ -167,7 +182,7 @@ function App() {
             ? `/ddbus/common/supermap/route/traffic?${qs}&token=${token}`
             : `https://cors-anywhere.herokuapp.com/https://bis.dsat.gov.mo:37812/ddbus/common/supermap/route/traffic?${qs}&token=${token}`;
 
-        console.log("Fetching Traffic/Route from:", targetUrl);
+        // console.log("Fetching Traffic/Route from:", targetUrl);
 
         // POST request as per official behavior
         const response = await axios.post(isDev ? '/ddbus/common/supermap/route/traffic' : 'https://cors-anywhere.herokuapp.com/https://bis.dsat.gov.mo:37812/ddbus/common/supermap/route/traffic',
@@ -184,7 +199,7 @@ function App() {
         
         if (response.data && Array.isArray(response.data.data)) {
              const dataList = response.data.data;
-             console.log("Traffic Data Array:", dataList.length);
+             // console.log("Traffic Data Array:", dataList.length);
              
              // Map data to segments
              // Each item likely corresponds to a stop index.
@@ -245,6 +260,13 @@ function App() {
 
       try {
           const results = await Promise.all([...promises, trafficPromise]);
+          
+          // Guard: Race Condition Check
+          if (activeRouteRef.current !== rNo) {
+             console.log(`Ignoring stale result for ${rNo} (Current: ${activeRouteRef.current})`);
+             return; 
+          }
+
           const trafficResult = results.pop(); // Last one is traffic
 
           // Find successful bus result...
@@ -311,9 +333,10 @@ function App() {
       // Map View API: User confirmed exact payload structure that works for padded codes.
       // Must include routeName, lang. Must EXCLUDE request_id.
       // routeCode must be PADDED (e.g. 00033).
-      const routeCodePadded = rNo.length === 2 ? '000' + rNo : (rNo.length === 3 ? '00' + rNo : rNo);
+      // Fix (Final): Universally correct 5-char padding (covers 1, 2, 3 digits)
+      const routeCodePadded = rNo.toString().padStart(5, '0');
       
-      console.log("Fetching Map Location for:", routeCodePadded, dir);
+      // console.log("Fetching Map Location for:", routeCodePadded, dir);
 
       const params = {
           routeName: rNo,      // e.g. "33"
@@ -338,11 +361,17 @@ function App() {
             }
         );
 
+        // Guard: Race Condition Check
+        if (activeRouteRef.current !== rNo) {
+            console.log(`Ignoring stale Map result for ${rNo}`);
+            return;
+        }
+
         if (res.data && res.data.data && res.data.data.busInfoList && res.data.data.busInfoList.length > 0) {
-            console.log("Map Bus Locations found:", res.data.data.busInfoList);
+            // console.log("Map Bus Locations found:", res.data.data.busInfoList);
             setMapBuses(res.data.data.busInfoList);
         } else {
-             console.log("Location API empty (or no buses). Trying List API fallback...");
+             // console.log("Location API empty (or no buses). Trying List API fallback...");
              
              // Define routeCodeRaw for fallback (routestation/bus expects raw "33")
              const routeCodeRaw = rNo.replace(/^0+/, ''); 
@@ -360,6 +389,9 @@ function App() {
                     new URLSearchParams(busParams).toString(),
                     { headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'token': busToken } }
                 );
+
+                if (activeRouteRef.current !== rNo) return; // Guard
+
                 if (busRes.data && busRes.data.data && busRes.data.data.routeInfo) {
                     let allBuses = [];
                     busRes.data.data.routeInfo.forEach(stop => {
@@ -372,32 +404,37 @@ function App() {
                 }
              } catch (fallbackErr) {
                  console.log("Fallback API failed:", fallbackErr);
-                 setMapBuses([]);
+                 if (activeRouteRef.current === rNo) setMapBuses([]);
              }
         }
 
         // Fetch Traffic INDEPENDENTLY of location success/fail
         try {
             const traffic = await fetchTrafficData(rNo.replace(/^0+/, ''), dir);
-            setTrafficData(traffic);
+            if (activeRouteRef.current === rNo) setTrafficData(traffic);
         } catch (tErr) {
             console.log("Traffic fetch failed:", tErr);
         }
       } catch (e) {
           console.error("Map Bus Fetch Error:", e);
-          setMapBuses([]);
+          if (activeRouteRef.current === rNo) setMapBuses([]);
       }
   };
 
   const toggleDirection = async () => {
       const newDir = direction === '0' ? '1' : '0';
       setDirection(newDir);
+      setMapBuses([]); // Clear map buses immediately
+      setTrafficData([]); // Clear traffic immediately
       
       // Seamlessly fetch new direction data without clearing current view immediately
-      if (routeNo) {
+      if (activeRoute) {
           try {
              // Optional: visual indicator on button could go here
-             const data = await fetchRouteDataInternal(routeNo, newDir);
+             const data = await fetchRouteDataInternal(activeRoute, newDir);
+             
+             if (activeRouteRef.current !== activeRoute) return; // Guard logic if route changed mid-toggle
+
              if (data && data.data && data.data.routeInfo && data.data.routeInfo.length > 0) {
                  const routeInfo = data.data.routeInfo;
                  const stops = routeInfo.map(stop => ({
@@ -411,7 +448,7 @@ function App() {
                     raw: data.data
                  });
                  // Trigger immediate bus update for new stops
-                 fetchRealtimeBus(routeNo, newDir, stops);
+                 fetchRealtimeBus(activeRoute, newDir, stops);
              }
           } catch (e) {
               console.error("Failed to switch direction", e);
@@ -423,27 +460,27 @@ function App() {
   // Auto Refresh Interval
   useEffect(() => {
       let interval;
-      if (busData && routeNo) {
+      // Depend on activeRoute!
+      if (busData && activeRoute) {
           // Immediate fetch on switch
           if (viewMode === 'map') {
-              fetchBusLocation(routeNo, direction);
+              fetchBusLocation(activeRoute, direction);
           } else {
              // list view update
-             fetchRealtimeBus(routeNo, direction, busData.stops);
+             fetchRealtimeBus(activeRoute, direction, busData.stops);
           }
 
           interval = setInterval(() => {
-              console.log(`Auto-refreshing data (${viewMode})...`);
-              if (viewMode === 'map') {
-                  fetchBusLocation(routeNo, direction);
-              } else {
+               if (viewMode === 'map') {
+                  fetchBusLocation(activeRoute, direction);
+               } else {
                   // Pass current stops so we don't lose structure, but update content
-                  fetchRealtimeBus(routeNo, direction, busData.stops);
-              }
+                  fetchRealtimeBus(activeRoute, direction, busData.stops);
+               }
           }, 5000);
       }
       return () => clearInterval(interval);
-  }, [busData, routeNo, direction, viewMode]); // Added viewMode dependency
+  }, [busData, activeRoute, direction, viewMode]); // Added activeRoute dependency
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 font-sans">
@@ -503,7 +540,7 @@ function App() {
         {busData && viewMode === 'list' && (
            <div className="flex justify-end mb-2">
              <button 
-               onClick={() => fetchRealtimeBus(routeNo, direction, busData.stops)}
+               onClick={() => fetchRealtimeBus(activeRoute, direction, busData.stops)}
                className="text-gray-500 text-sm flex items-center gap-1 hover:text-teal-600"
              >
                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -521,7 +558,7 @@ function App() {
         {/* Results */}
         {busData && (
           <div className="border-t pt-4">
-             <h2 className="text-lg font-semibold mb-2">Route: {routeNo}</h2>
+             <h2 className="text-lg font-semibold mb-2">Route: {activeRoute}</h2>
              <div className="space-y-2">
                 {/* 
                    We need to display the list of stops.
@@ -535,7 +572,7 @@ function App() {
                     <div className="bg-green-50 p-2 rounded mb-2 text-sm text-green-800">
                         {busData.buses.length} Active Buses Found.
                         {/* Try to dump bus info if available */}
-                        <pre className="text-xs overflow-auto max-h-20">{JSON.stringify(busData.buses, null, 2)}</pre>
+                        {/* <pre className="text-xs overflow-auto max-h-20">{JSON.stringify(busData.buses, null, 2)}</pre> */}
                     </div>
                 ) : (
                     <div className="bg-yellow-50 p-2 rounded mb-2 text-sm text-yellow-800">
@@ -667,10 +704,10 @@ function App() {
                     </div>
                 )}
 
-        {/* Map View */}
-        {busData && viewMode === 'map' && (
+        {/* Map View - Keep mounted if loading to prevent flash */}
+        {(busData || (loading && viewMode === 'map')) && viewMode === 'map' && (
             <MapComponent 
-                stations={busData.stops} 
+                stations={busData ? busData.stops : []} 
                 buses={mapBuses} 
                 traffic={trafficData} // Pass traffic segments
             />
