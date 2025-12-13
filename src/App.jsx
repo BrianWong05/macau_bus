@@ -1,8 +1,8 @@
-
 import { useState, useEffect, useRef } from 'react';
 import MapComponent from './components/MapComponent';
 import BusList from './components/BusList';
 import RouteDashboard from './components/RouteDashboard';
+import NearbyStops from './components/NearbyStops';
 import { fetchRouteDataApi, fetchTrafficApi, fetchBusListApi, fetchMapLocationApi } from './services/api';
 
 function App() {
@@ -16,7 +16,8 @@ function App() {
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
   const [mapBuses, setMapBuses] = useState([]); // Buses for Map View (lat/lon)
   const [trafficData, setTrafficData] = useState([]); // Traffic Info (Array of Segments)
-  const [lastUpdated, setLastUpdated] = useState(null); // Last successful fetch time
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [showNearby, setShowNearby] = useState(false); // Last successful fetch time
 
   // Ref to track active route for preventing race conditions (async fetches returning after route switch)
   const activeRouteRef = useRef('');
@@ -329,141 +330,182 @@ function App() {
   }, [mapBuses, viewMode]);
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 font-sans">
-      <div className="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden p-6 min-h-[600px] flex flex-col">
-        <div className="flex justify-between items-center mb-4">
-            <h1 className="text-xl font-bold text-teal-600">Macau Bus Waiting</h1>
-            <button 
-                onClick={() => setViewMode('dashboard')}
-                className="text-xs bg-blue-50 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-100 transition font-semibold"
-            >
-                All Routes
-            </button>
-        </div>
-
-        {viewMode === 'dashboard' ? (
-            <RouteDashboard onSelectRoute={handleSelectRoute} />
-        ) : (
-            <>
+    <div className="min-h-screen bg-gray-100 font-sans">
+      <div className="max-w-md mx-auto bg-white min-h-screen shadow-lg flex flex-col relative">
         
-        {/* Search Input */}
-        <div className="flex gap-2 mb-4">
-          <input 
-            type="text" 
-            value={routeNo} 
-            onChange={(e) => setRouteNo(e.target.value)} 
-            placeholder="Route No. (e.g. 33, N2)"
-            className="flex-1 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
-          />
-          <button 
-            onClick={handleSearch}
-            className="bg-teal-500 text-white px-4 py-2 rounded hover:bg-teal-600 transition"
-          >
-            Search
-          </button>
+        {/* Header */}
+        <div className="bg-gradient-to-r from-teal-500 to-emerald-500 text-white p-4 shadow-md sticky top-0 z-10">
+          <div className="flex justify-between items-center mb-4">
+             <h1 
+                className="text-2xl font-bold tracking-tight cursor-pointer flex items-center gap-2"
+                onClick={() => {
+                    setBusData(null);
+                    setTrafficData(null);
+                    setActiveRoute('');
+                    setRouteNo('');
+                    setShowNearby(false);
+                    setViewMode('dashboard');
+                }}
+             >
+                🚍 Macau Bus
+             </h1>
+             <button 
+                onClick={() => setShowNearby(true)}
+                className="bg-white/20 p-2 rounded-full hover:bg-white/30 transition backdrop-blur-sm"
+                title="Nearby Stops"
+             >
+                📍
+             </button>
+          </div>
+
+          {!busData && (
+             <div className="text-teal-100 text-sm mb-4">
+                Real-time bus tracking & traffic
+             </div>
+          )}
+          
+          {/* Search Bar - Only show on Home Screen */}
+          {!busData && !showNearby && (
+             <div className="flex gap-2">
+               <input 
+                 type="text" 
+                 value={routeNo} 
+                 onChange={(e) => setRouteNo(e.target.value)} 
+                 placeholder="Route No. (e.g. 33, N2)"
+                 className="flex-1 text-gray-800 border-0 rounded px-4 py-3 focus:outline-none focus:ring-2 focus:ring-white/50 shadow-inner"
+               />
+               <button 
+                 onClick={handleSearch}
+                 className="bg-white text-teal-600 px-6 py-3 rounded font-bold hover:bg-teal-50 shadow-lg transition"
+               >
+                 GO
+               </button>
+             </div>
+          )}
+          
+          {/* Active Route Header (Compact) */}
+          {busData && (
+              <div className="flex items-center gap-3 bg-white/10 p-2 rounded-lg backdrop-blur-md">
+                 <div className="bg-white text-teal-600 font-bold px-3 py-1 rounded text-xl shadow">
+                    {activeRoute}
+                 </div>
+                 <div className="flex-1 min-w-0">
+                    <div className="text-xs text-teal-100 uppercase font-semibold tracking-wider">To Destination</div>
+                    <div className="font-medium truncate">{busData.stops[busData.stops.length-1]?.staName}</div>
+                 </div>
+              </div>
+          )}
         </div>
 
-        {/* Direction Toggle - Hidden if no opposite direction or no data */}
-        {busData && hasOppositeDirection && (
-            <div className="flex justify-center mb-4 gap-4">
-                <button 
-                    onClick={toggleDirection}
-                    className="text-sm text-teal-600 underline"
-                >
-                    Switch Direction (Current: {direction === '0' ? 'Forward' : 'Backward'})
-                </button>
-            </div>
-        )}
+        {/* Content Area */}
+        <div className="flex-1 flex flex-col">
+            
+            {/* 1. Nearby Stops Modal */}
+            {showNearby && (
+                <NearbyStops 
+                    onClose={() => setShowNearby(false)}
+                    onSelectRoute={(route) => {
+                        setRouteNo(route);
+                        handleSearchDirect(route);
+                        setShowNearby(false);
+                    }}
+                />
+            )}
 
-        {/* View Toggle (List | Map) */}
-        {busData && (
-             <div className="flex justify-center mb-4">
-                <div className="bg-gray-200 p-1 rounded-lg flex">
-                    <button
-                        onClick={() => setViewMode('list')}
-                        className={`px-4 py-1 rounded-md text-sm transition ${viewMode === 'list' ? 'bg-white shadow text-teal-600 font-bold' : 'text-gray-500'}`}
-                    >
-                        List
-                    </button>
-                    <button
-                        onClick={() => setViewMode('map')}
-                        className={`px-4 py-1 rounded-md text-sm transition ${viewMode === 'map' ? 'bg-white shadow text-teal-600 font-bold' : 'text-gray-500'}`}
-                    >
-                        Map
-                    </button>
-                </div>
-             </div>
-        )}
+            {/* 2. Route Dashboard (Route List) */}
+            {!busData && !showNearby && (
+                <RouteDashboard onSelectRoute={(route) => {
+                    setRouteNo(route);
+                    handleSearchDirect(route);
+                }} />
+            )}
 
-        {/* Refresh Button & Timestamp */}
-        {busData && (
-           <div className="flex justify-between items-center mb-2 px-2">
-             <div className="text-xs text-gray-400">
-                {lastUpdated ? `Updated: ${lastUpdated.toLocaleTimeString()}` : ''}
-             </div>
-             <button 
-               onClick={() => {
-                   if (viewMode === 'map') fetchBusLocation(activeRoute, direction);
-                   else fetchRealtimeBus(activeRoute, direction, busData.stops);
-               }}
-               className="text-gray-500 text-sm flex items-center gap-1 hover:text-teal-600"
-             >
-               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-               </svg>
-               Refresh
-             </button>
-           </div>
-        )}
+            {/* 3. Active Bus Detail View */}
+            {busData && !showNearby && (
+                <div className="flex-1 flex flex-col relative">
+                    
+                     {/* Controls Bar */}
+                     <div className="bg-white border-b px-4 py-2 flex items-center justify-between sticky top-0 z-10 shadow-sm">
+                        
+                         {/* View Toggle */}
+                         <div className="bg-gray-100 p-1 rounded-lg flex">
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${viewMode === 'list' ? 'bg-white shadow text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                List
+                            </button>
+                            <button
+                                onClick={() => setViewMode('map')}
+                                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${viewMode === 'map' ? 'bg-white shadow text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Map
+                            </button>
+                        </div>
 
-        {/* Loading / Error */}
-        {loading && <p className="text-center text-gray-500">Loading...</p>}
-        {error && <p className="text-center text-red-500 text-sm">{error}</p>}
-
-        {/* Results */}
-        {busData && (
-          <div className="border-t pt-4">
-             <h2 className="text-lg font-semibold mb-2">Route: {activeRoute}</h2>
-             <div className="space-y-2">
-                
-                {/* Active Buses Summary */}
-                {busData.buses.length > 0 ? (
-                    <div className="bg-green-50 p-2 rounded mb-2 text-sm text-green-800">
-                        {busData.buses.length} Active Buses Found.
-                    </div>
-                ) : (
-                    <div className="bg-yellow-50 p-2 rounded mb-2 text-sm text-yellow-800">
-                        {mapBuses.some(b => b.staCode) ? (
-                            <span>⚠️ GPS Signal Weak. Tracking via Station Updates (Approximate Location).</span>
-                        ) : (
-                            <span>No active buses found (or GPS API restriction).</span>
+                        {/* Direction Toggle */}
+                        {hasOppositeDirection && (
+                            <button 
+                                onClick={toggleDirection}
+                                className="bg-teal-50 text-teal-600 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-teal-100 transition flex items-center gap-1"
+                            >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
+                                Switch Dir
+                            </button>
                         )}
-                    </div>
-                )}
+                     </div>
 
-                {/* Stops List (Timeline) */}
-                {busData && viewMode === 'list' && (
-                    <BusList stops={busData.stops} trafficData={trafficData} />
-                )}
+                     {/* Refresh Status */}
+                     <div className="bg-gray-50 px-4 py-1 flex justify-between items-center text-[10px] text-gray-400 border-b">
+                        <span>
+                             {lastUpdated ? `Updated: ${lastUpdated.toLocaleTimeString()}` : 'Connecting...'}
+                        </span>
+                        <button 
+                            onClick={() => {
+                                if (viewMode === 'map') fetchBusLocation(activeRoute, direction);
+                                else fetchRealtimeBus(activeRoute, direction, stopsRef.current);
+                            }}
+                            className="hover:text-teal-600 flex items-center gap-1"
+                        >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                            Refresh
+                        </button>
+                     </div>
 
-                {/* Map View */}
-                {viewMode === 'map' && (
-                    <div className="mt-4 border rounded overflow-hidden">
-                         <div style={{ height: '500px', width: '100%' }}>
-                            <MapComponent 
-                                stations={busData.stops} 
-                                buses={mapBuses}
-                                traffic={trafficData} // Pass traffic segments
-                            />
-                         </div>
-                    </div>
-                )}
+                     <div className="flex-1 overflow-y-auto relative bg-white">
+                        {/* Active Buses Banner */}
+                        {busData.buses.length > 0 ? (
+                            <div className="bg-green-50/80 backdrop-blur px-4 py-2 border-b border-green-100 text-xs font-medium text-green-700 flex items-center gap-2 sticky top-0 z-10">
+                                <span className="relative flex h-2 w-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                                </span>
+                                {busData.buses.length} buses live on route
+                            </div>
+                        ) : (
+                             <div className="bg-yellow-50/80 backdrop-blur px-4 py-2 border-b border-yellow-100 text-xs font-medium text-yellow-700 sticky top-0 z-10">
+                                {mapBuses.some(b => b.staCode) ? 
+                                    "⚠️ GPS Weak - Tracking by Station" : 
+                                    "connecting to bus network..."}
+                            </div>
+                        )}
 
-             </div>
-          </div>
-        )}
-      </>
-      )}
+                        {viewMode === 'list' ? (
+                            <BusList stops={busData.stops} trafficData={trafficData} />
+                        ) : (
+                             /* Map Component Container */
+                            <div className="h-[500px] w-full relative">
+                                <MapComponent 
+                                    route={busData} 
+                                    buses={mapBuses}
+                                    activeRoute={activeRoute}
+                                />
+                             </div>
+                        )}
+                     </div>
+                </div>
+            )}
+        </div>
       </div>
     </div>
   );
