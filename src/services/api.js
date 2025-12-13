@@ -144,14 +144,13 @@ export const fetchBusListApi = async (rNo, dir, routeType) => {
 
 // 4. Fetch Map Location (GPS)
 export const fetchMapLocationApi = async (rNo, dir) => {
-      const routeCodePadded = rNo.toString().padStart(5, '0');
+      const routeCodePadded = rNo.trim().toString().padStart(5, '0');
       
       const params = {
-          routeName: rNo,
+          routeName: rNo.trim(),
           dir: dir,
           lang: 'zh-tw',
-          routeCode: routeCodePadded, 
-          device: 'web'
+          routeCode: routeCodePadded
       };
       const token = generateDsatToken(params);
 
@@ -159,21 +158,18 @@ export const fetchMapLocationApi = async (rNo, dir) => {
         ? '/macauweb/routestation/location' 
         : 'https://cors-anywhere.herokuapp.com/https://bis.dsat.gov.mo:37812/macauweb/routestation/location';
       
-      // Add cache buster
-      const finalUrl = `${url}?t=${Date.now()}`;
+      // Use GET request with params in URL to avoid Error 1200 (Invalid Session/Method)
+      const qs = new URLSearchParams(params).toString();
+      const finalUrl = `${url}?${qs}&t=${Date.now()}`;
 
       try {
-        const res = await axios.post(finalUrl,
-            new URLSearchParams(params).toString(),
-            {
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                    'token': token,
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json, text/javascript, */*; q=0.01'
-                }
+        const res = await axios.get(finalUrl, {
+            headers: {
+                'token': token,
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json, text/javascript, */*; q=0.01'
             }
-        );
+        });
         return res.data;
       } catch (e) {
           throw e;

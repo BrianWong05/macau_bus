@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 
 scripts/*
+
+# Debug Scripts
+debug_*.js
+temp_*.js

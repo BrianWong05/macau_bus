@@ -17,12 +17,37 @@ let DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 // Custom Bus Icon
-const createBusIcon = (heading) => L.divIcon({
-  html: `<div style="transform: rotate(${heading || 0}deg); font-size: 20px;">🚌</div>`,
-  className: 'bus-marker-icon', // no default styling
-  iconSize: [30, 30],
-  iconAnchor: [15, 15]
-});
+const createBusIcon = (bus) => {
+    // Determine color based on busType
+    // 1=Large (Blue), 2=Medium (Green), 3=Small (Purple)
+    // Fallback: Blue
+    let bgColor = 'bg-blue-600';
+    let borderColor = 'border-blue-700';
+    
+    if (bus.busType === '2') { bgColor = 'bg-teal-600'; borderColor = 'border-teal-700'; }
+    if (bus.busType === '3') { bgColor = 'bg-purple-600'; borderColor = 'border-purple-700'; }
+
+    return L.divIcon({
+        html: `
+        <div class="relative flex flex-col items-center select-none" style="transform: translateY(-20px);">
+            <!-- Bus Body -->
+            <div class="${bgColor} ${borderColor} border-2 rounded-lg shadow-lg p-1 min-w-[50px] text-center flex flex-col items-center z-10">
+                <div class="text-[10px] font-bold text-white leading-tight whitespace-nowrap px-1">
+                    ${bus.busPlate}
+                </div>
+                <div class="text-[9px] text-white/90 leading-tight">
+                    ${bus.speed} km/h
+                </div>
+            </div>
+            <!-- Triangle Pointer -->
+            <div class="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] ${borderColor} transform -translate-y-[2px]"></div>
+        </div>
+        `,
+        className: 'bus-marker-label-icon', // Use new class avoid default styling
+        iconSize: [60, 40],
+        iconAnchor: [30, 40]
+    });
+};
 
 // Component to auto-fit bounds
 const FitBounds = ({ stations, buses }) => {
@@ -144,7 +169,7 @@ const MapComponent = ({ stations, buses, traffic }) => {
             <Marker 
                 key={bus.busPlate || `bus-${idx}`}
                 position={[lat, lon]}
-                icon={createBusIcon(0)} 
+                icon={createBusIcon(bus)} 
                 zIndexOffset={1000} // Buses on top
             >
                 <Popup>

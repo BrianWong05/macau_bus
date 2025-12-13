@@ -285,7 +285,7 @@ function App() {
                   // Pass current stops so we don't lose structure, but update content
                   fetchRealtimeBus(activeRoute, direction, busData.stops);
                }
-          }, 1000); // 1-second refresh
+          }, 3000); // 3-second refresh
       }
       return () => clearInterval(interval);
   }, [busData, activeRoute, direction, viewMode]); // Added activeRoute dependency
@@ -294,7 +294,12 @@ function App() {
   useEffect(() => {
     if (viewMode === 'map' && mapBuses.length > 0) {
         // console.log("Current Map Buses State:", mapBuses);
-        const coords = mapBuses.map(b => `${b.busPlate}: ${b.latitude}, ${b.longitude} (Speed: ${b.speed})`);
+        const coords = mapBuses.map(b => {
+            if (b.latitude && b.longitude) {
+                return `${b.busPlate}: ${b.latitude}, ${b.longitude} (Speed: ${b.speed})`;
+            }
+            return `${b.busPlate}: Station ${b.staCode} (Fallback)`;
+        });
         console.log("Bus Locations Update:", coords);
     }
   }, [mapBuses, viewMode]);
