@@ -231,17 +231,17 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                          else info = `${minStops} stops away`;
 
                          // 2. Fetch GPS for Map (If there are incoming buses)
-                         // Only fetch if we have potential buses to show to save bandwidth?
-                         // User wants to see "buses that will go to that stop". 
-                         // So we should try to fetch GPS if `incomingPlates` > 0.
-                         if (incomingPlates.length > 0) {
+                         // User wants only the 2 closest buses per route
+                         const targetPlates = incomingPlates.slice(-2);
+
+                         if (targetPlates.length > 0) {
                              try {
                                  const gpsData = await fetchMapLocationApi(route, d);
                                  const busList = gpsData.busInfoList || (gpsData.data && gpsData.data.busInfoList) || [];
                                  
                                  // Filter GPS list by incoming plates
                                  const matchedBuses = busList
-                                    .filter(b => incomingPlates.includes(b.busPlate))
+                                    .filter(b => targetPlates.includes(b.busPlate))
                                     .map(b => ({
                                         ...b,
                                         route: route,
