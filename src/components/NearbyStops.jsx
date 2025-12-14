@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { fetchBusListApi } from '../services/api';
 import govData from '../data/gov_data.json';
 const stopsData = govData.stops;
 
@@ -7,6 +8,9 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [expandedStop, setExpandedStop] = useState(null);
+  const [arrivalData, setArrivalData] = useState({}); // { stopCode: { route: "3 stops" } }
+  const [loadingArrivals, setLoadingArrivals] = useState({}); // { stopCode: true/false }
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -41,7 +45,9 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                 // Split, trim, and deduplicate
                 routes = [...new Set(stop.raw.ROUTE_NOS.split(',').map(r => r.trim()))];
             }
-            return { ...stop, distance: dist, routes };
+            // Fix: Map code from raw if missing
+            const code = stop.code || stop.raw?.P_ALIAS?.replace('_', '-') || stop.raw?.ALIAS || 'UNKNOWN';
+            return { ...stop, code, distance: dist, routes };
         });
 
         // Sort by distance
@@ -79,6 +85,130 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
       if (km < 1) return `${Math.round(km * 1000)}m`;
       return `${km.toFixed(1)}km`;
   }
+
+  // --- New Logic: Fetch Arrivals for a Stop ---
+  const handleExpandStop = async (stop) => {
+      // Toggle logic
+      if (expandedStop === stop.code) {
+          setExpandedStop(null);
+          return;
+      }
+      setExpandedStop(stop.code);
+
+      // Guard: Don't refetch if already valid (cache for 1 min?) - For now just re-fetch
+      setLoadingArrivals(prev => ({...prev, [stop.code]: true}));
+      setArrivalData(prev => ({...prev, [stop.code]: {} })); // Clear old
+
+      try {
+          // Process all routes for this stop
+          // Note: We don't know direction. We must probe.
+          // This is expensive (N routes * 2 directions).
+          
+          const newArrivals = {};
+          
+          await Promise.all(stop.routes.map(async (route) => {
+               // Initial guess: Try Dir 0 first
+               // We only need one valid direction that CONTAINS this stop.
+               
+               let found = false;
+               let info = "Waiting...";
+               
+               // Helper to check direction
+               const checkDir = async (d) => {
+                   try {
+                     // Try Type '2' first (common), then '0'
+                     // Actually App.jsx probes '0' and '2'. Let's just try '2' as it covers most.
+                     // Or better: Use the same probe logic as App.jsx roughly.
+                     let res = await fetchBusListApi(route, d, '2');
+                     if (!res.data || !res.data.data) {
+                         res = await fetchBusListApi(route, d, '0');
+                     }
+
+                     if (res.data && res.data.data && res.data.data.routeInfo) {
+                         const stops = res.data.data.routeInfo;
+                         console.log(`Checking Route ${route} (Dir ${d}) for Stop ${stop.code}`);
+                         // console.log("Stops in route:", stops.map(s => s.staCode).join(', '));
+
+                         // Match robustly: API returns "T311/2" or "M11-1" or "M11_1".
+                         const stopIdx = stops.findIndex(s => {
+                             // Normalize everything to hyphens
+                             // s.staCode might be "T311/2" -> "T311-2"
+                             const sCode = (s.staCode || "").replace(/\//g, '-').replace(/_/g, '-');
+                             const target = (stop.code || "").replace(/\//g, '-').replace(/_/g, '-');
+                             const targetBase = target.split('-')[0];
+                             
+                             // 1. Exact match (normalized)
+                             if (sCode === target) return true;
+
+                             // 2. Base Match (Loose)
+                             // T311-2 vs T311
+                             if (sCode === targetBase || sCode.split('-')[0] === targetBase) return true;
+                             
+                             return false;
+                         });
+                         
+                         if (stopIdx !== -1) {
+                             // Found stop in this route direction!
+                             found = true;
+                             
+                             // Calculate Arrivals
+                             // Find active buses before this stop
+                            const buses = stops.flatMap(s => s.buses || []);
+                            
+                            // Parse bus stop indices
+                            // Bus object: { busPlate: "MW-12-34", ... } -> It's attached to the stop object usually.
+                            // In this API structure, 'buses' array is inside the 'stop' object.
+                            
+                            // Find closest bus
+                            let minStops = 999;
+                            let closestBus = null;
+
+                             for (let i = 0; i <= stopIdx; i++) {
+                                 if (stops[i].buses && stops[i].buses.length > 0) {
+                                     const dist = stopIdx - i;
+                                     if (dist < minStops) {
+                                         minStops = dist;
+                                         closestBus = stops[i].buses[0];
+                                     }
+                                 }
+                             }
+
+                             if (minStops === 999) {
+                                 info = "No bus en route";
+                             } else if (minStops === 0) {
+                                 info = "Arriving / At Station";
+                             } else {
+                                 info = `${minStops} stops away`;
+                             }
+                             return true; // Stop searching directions for THIS route
+                         }
+                     }
+                   } catch (e) { console.warn(e); }
+                   return false;
+               };
+
+               // Probe Dir 0
+               if (await checkDir('0')) {
+                   newArrivals[route] = info;
+                   return;
+               }
+               // Probe Dir 1
+               if (await checkDir('1')) {
+                   newArrivals[route] = info;
+               } else {
+                   newArrivals[route] = "No Service / Wrong Sta";
+               }
+
+          }));
+
+          setArrivalData(prev => ({...prev, [stop.code]: newArrivals }));
+
+      } catch (err) {
+          console.error("Arrival fetch failed", err);
+      } finally {
+          setLoadingArrivals(prev => ({...prev, [stop.code]: false}));
+      }
+  };
 
   return (
     <div className="flex flex-col h-full bg-white animate-fade-in-up">
@@ -119,10 +249,22 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
             )}
 
             {nearbyStops.map((stop, index) => (
-                <div key={stop.raw?.POLE_ID || `${stop.code}-${index}`} className="border border-gray-100 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow bg-white">
-                    <div className="flex justify-between items-start mb-2">
+                <div 
+                    key={stop.raw?.POLE_ID || `${stop.code}-${index}`} 
+                    className={`border rounded-xl shadow-sm transition-all bg-white overflow-hidden ${expandedStop === stop.code ? 'ring-2 ring-teal-500 shadow-md' : 'hover:shadow-md border-gray-100'}`}
+                >
+                    <div 
+                        className="p-4 flex justify-between items-start cursor-pointer"
+                        onClick={() => handleExpandStop(stop)}
+                    >
                         <div>
-                            <h3 className="font-bold text-gray-800 text-lg">{stop.name}</h3>
+                            <h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
+                                {stop.name}
+                                {expandedStop === stop.code ? 
+                                    <span className="text-xs text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full">Open</span> : 
+                                    <span className="text-xs text-gray-400">▼</span>
+                                }
+                            </h3>
                             <div className="text-xs text-gray-400 font-mono">{stop.code}</div>
                         </div>
                         <div className="bg-blue-50 text-blue-600 px-2 py-1 rounded-lg text-xs font-bold whitespace-nowrap flex items-center gap-1">
@@ -130,21 +272,51 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                         </div>
                     </div>
                     
-                    {/* Routes Chips */}
-                    <div className="flex flex-wrap gap-2 mt-2">
-                        {stop.routes && stop.routes.map(route => (
-                            <button
-                                key={route}
-                                onClick={() => {
-                                    onSelectRoute(route);
-                                    onClose();
-                                }}
-                                className="px-3 py-1 bg-gray-100 hover:bg-teal-50 text-gray-600 hover:text-teal-700 text-sm font-medium rounded-full transition-colors border border-transparent hover:border-teal-200"
-                            >
-                                {route}
-                            </button>
-                        ))}
-                    </div>
+                    {/* Collapsed State: Chips */}
+                    {expandedStop !== stop.code && (
+                        <div className="px-4 pb-4 flex flex-wrap gap-2">
+                            {stop.routes && stop.routes.map(route => (
+                                <span key={route} className="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded">
+                                    {route}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Expanded State: Arrival Table */}
+                    {expandedStop === stop.code && (
+                        <div className="bg-gray-50 border-t p-3 text-sm">
+                            {loadingArrivals[stop.code] ? (
+                                <div className="text-gray-500 flex items-center gap-2 justify-center py-2">
+                                    <div className="animate-spin h-4 w-4 border-2 border-teal-500 border-t-transparent rounded-full"></div>
+                                    Loading live data...
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 gap-2">
+                                    {stop.routes.map(route => {
+                                        const info = arrivalData[stop.code]?.[route] || "---";
+                                        const active = info.includes("stops") || info.includes("Arriving");
+                                        return (
+                                            <div 
+                                                key={route} 
+                                                className="bg-white p-2 rounded border flex flex-col justify-between cursor-pointer hover:border-teal-300 transition"
+                                                onClick={(e) => {
+                                                    e.stopPropagation(); // prevent toggle
+                                                    onSelectRoute(route);
+                                                    onClose();
+                                                }}
+                                            >
+                                                <div className="font-bold text-lg text-gray-700">{route}</div>
+                                                <div className={`text-xs font-semibold ${active ? 'text-green-600' : 'text-gray-400'}`}>
+                                                    {info}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             ))}
         </div>
