@@ -3,97 +3,45 @@ import MapComponent from './components/MapComponent';
 import BusList from './components/BusList';
 import RouteDashboard from './components/RouteDashboard';
 import NearbyStops from './components/NearbyStops';
-import { fetchRouteDataApi, fetchTrafficApi, fetchBusListApi, fetchMapLocationApi } from './services/api';
+import { useRouteData } from './features/route-tracker';
+import { fetchTrafficApi } from './services/api';
 
 function App() {
   const [routeNo, setRouteNo] = useState(''); // Input value
   const [activeRoute, setActiveRoute] = useState(''); // Actual confirmed route for fetching
   const [direction, setDirection] = useState('0'); // '0' or '1'
-  const [busData, setBusData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [hasOppositeDirection, setHasOppositeDirection] = useState(true); // Default true until checked
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
-  const [mapBuses, setMapBuses] = useState([]); // Buses for Map View (lat/lon)
-  const [trafficData, setTrafficData] = useState([]); // Traffic Info (Array of Segments)
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const [showNearby, setShowNearby] = useState(false); // Last successful fetch time
-  const [scrollToStop, setScrollToStop] = useState(null); // Stop code to scroll to after load
+  const [showNearby, setShowNearby] = useState(false);
+  const [scrollToStop, setScrollToStop] = useState(null);
 
-  // Ref to track active route for preventing race conditions (async fetches returning after route switch)
-  const activeRouteRef = useRef('');
+  // Use extracted hook for route data management
+  const {
+    busData,
+    mapBuses,
+    trafficData,
+    loading,
+    error,
+    hasOppositeDirection,
+    lastUpdated,
+    executeSearch,
+    fetchRealtimeBus,
+    fetchBusLocation,
+    setBusData,
+    setMapBuses,
+    setTrafficData,
+    setLoading,
+    setError,
+    setHasOppositeDirection,
+    activeRouteRef,
+  } = useRouteData();
+
   const stopsRef = useRef([]);
 
   useEffect(() => {
       activeRouteRef.current = activeRoute;
-  }, [activeRoute]);
+  }, [activeRoute, activeRouteRef]);
 
-
-  const executeSearch = async (routeToFetch, dirToFetch) => {
-    if (!routeToFetch) return;
-    setLoading(true);
-    setError('');
-    setActiveRoute(routeToFetch); 
-    activeRouteRef.current = routeToFetch;
-    
-    // Only clear data if we are switching to a completely different route to avoid flash
-    // If switching direction on same route, keep old data until new data arrives
-    if (routeToFetch !== activeRoute) {
-        setBusData(null);
-        setMapBuses([]); 
-        setTrafficData([]);
-        setHasOppositeDirection(false); 
-    }
-
-    try {
-        console.log(`Searching for Route: ${routeToFetch}, Dir: ${dirToFetch}`);
-        
-        // 1. Fetch Route Stops
-        const data = await fetchRouteDataApi(routeToFetch, dirToFetch);
-        
-        if (activeRouteRef.current !== routeToFetch) return;
-
-        if (data && data.data && data.data.routeInfo && data.data.routeInfo.length > 0) {
-             const stops = data.data.routeInfo.map(stop => ({
-                 ...stop,
-                 buses: [],
-                 trafficLevel: 0
-             }));
-             
-             setBusData({
-                 stops: stops,
-                 buses: [],
-                 raw: data.data,
-                 direction: dirToFetch // Track direction to prevent race conditions during toggle
-             });
-             
-             fetchRealtimeBus(routeToFetch, dirToFetch, stops);
-
-             // 2. Probe Opposite Direction
-             const oppositeDir = dirToFetch === '0' ? '1' : '0';
-             try {
-                  const oppositeData = await fetchRouteDataApi(routeToFetch, oppositeDir);
-                  if (oppositeData && oppositeData.data && oppositeData.data.routeInfo && oppositeData.data.routeInfo.length > 0) {
-                      if (activeRouteRef.current === routeToFetch) setHasOppositeDirection(true);
-                  } else {
-                      if (activeRouteRef.current === routeToFetch) setHasOppositeDirection(false);
-                  }
-             } catch (probeError) {
-                  console.log("Opposite direction probe failed:", probeError);
-                  if (activeRouteRef.current === routeToFetch) setHasOppositeDirection(false);
-             }
-
-        } else {
-            setError("Route not found or empty data.");
-        }
-
-    } catch (err) {
-        console.error("Search Error:", err);
-        setError(err.message || "Failed to fetch route data");
-    } finally {
-        if (activeRouteRef.current === routeToFetch) setLoading(false);
-    }
-  };
+  // Note: executeSearch is now provided by useRouteData hook
 
   // Scroll to target stop when data loads
   useEffect(() => {
@@ -139,158 +87,19 @@ function App() {
   };
 
   const handleSearch = () => {
+    setActiveRoute(routeNo); // Sync local state
     executeSearch(routeNo, direction);
   };
 
   const handleSelectRoute = (route, dir = '0') => {
       setRouteNo(route);
       setDirection(dir);
+      setActiveRoute(route); // Sync local state
       setViewMode('list');
       executeSearch(route, dir);
   };
   
-  const fetchRealtimeBus = async (rNo, dir, currentStops) => {
-      // routeType varies (N2=0, N3=2, 33=2). 
-      const typesToProbe = ['0', '2'];
-      
-      // Parallel Probe for bus list data
-      const promises = typesToProbe.map(type => fetchBusListApi(rNo, dir, type));
-
-      // Also start Traffic Fetch
-      const trafficPromise = fetchTrafficApi(rNo.replace(/^0+/, ''), dir);
-
-      try {
-          const results = await Promise.all([...promises, trafficPromise]);
-          
-          // Guard: Race Condition Check
-          if (activeRouteRef.current !== rNo) {
-             console.log(`Ignoring stale result for ${rNo} (Current: ${activeRouteRef.current})`);
-             return; 
-          }
-
-          const trafficResult = results.pop(); // Last one is traffic
-
-          // Find successful bus result...
-          const validResult = results.find(r => r.data && r.data.header === '000');
-          
-          if (validResult && validResult.data && validResult.data.data && validResult.data.data.routeInfo) {
-              console.log(`Found valid data with routeType=${validResult.type}`);
-              const realtimeStops = validResult.data.data.routeInfo;
-              
-              // Merge bus info and traffic into currentStops
-              const updatedStops = currentStops.map(stop => {
-                   const matchingStop = realtimeStops.find(rs => rs.staCode === stop.staCode);
-                   if (matchingStop) {
-                       return {
-                           ...stop,
-                           // Update Buses
-                           buses: (matchingStop.busInfo || []).map(b => ({
-                               ...b,
-                               status: b.status, // 0=Moving, 1=Arrived
-                               speed: b.speed,
-                               busPlate: b.busPlate,
-                               busType: b.busType,
-                               isFacilities: b.isFacilities,
-                               passengerFlow: b.passengerFlow
-                           })),
-                           // If traffic data has a key for this stop?
-                           // Traffic result is array of segments. 
-                           // Actually trafficResult is segments array from new API logic.
-                           // Need to map segments to stops if we want color? 
-                           // Current implementation just passes trafficResult to MapComponent.
-                           // Timeline uses stop.trafficLevel.
-                           trafficLevel: 0 // Placeholder as traffic logic was simplified in extracted API
-                       };
-                   }
-                   return { ...stop, buses: [], trafficLevel: 0 };
-              });
-              
-              // Extract all active buses for summary
-              const allBuses = updatedStops.flatMap(s => s.buses).map(b => ({
-                  ...b,
-                  plate: b.busPlate,
-                  speed: b.speed
-              }));
-
-              setBusData(prev => ({
-                  ...prev,
-                  stops: updatedStops,
-                  buses: allBuses
-              }));
-          } else {
-             console.warn("No valid realtime data found in probes:", results);
-          }
-      } catch (e) {
-          console.error("Realtime fetch failed", e);
-      }
-  };
-
-  const fetchBusLocation = async (rNo, dir) => {
-      try {
-        const data = await fetchMapLocationApi(rNo, dir);
-
-        // Guard: Race Condition Check
-        if (activeRouteRef.current !== rNo) {
-            console.log(`Ignoring stale Map result for ${rNo}`);
-            return;
-        }
-        
-        setLastUpdated(new Date()); // Update timestamp
-
-        // Must match fixed logic: busInfoList might be at root
-        const busList = data.busInfoList || (data.data && data.data.busInfoList);
-
-        if (busList && busList.length > 0) {
-            console.log("Map GPS Buses found:", busList.length);
-            setMapBuses(busList);
-        } else {
-             // console.log("Location API empty (or no buses). Trying List API fallback...");
-             const typesToProbe = ['0', '2'];
-             
-             // Try to fetch detailed list data for hydration
-             let found = false;
-             for (const type of typesToProbe) {
-                 if (found) break;
-                 const busRes = await fetchBusListApi(rNo, dir, type);
-                 
-                 if (activeRouteRef.current !== rNo) return; // Guard
-
-                 if (busRes.data && busRes.data.data && busRes.data.data.routeInfo) {
-                    let allBuses = [];
-                    
-                    busRes.data.data.routeInfo.forEach(stop => {
-                        if (stop.busInfo) {
-                            // Inject staCode so MapComponent can hydrate location
-                            const busesAtStop = stop.busInfo.map(b => ({
-                                ...b,
-                                staCode: stop.staCode
-                            }));
-                            allBuses = [...allBuses, ...busesAtStop];
-                        }
-                    });
-
-                    if (allBuses.length > 0) {
-                        console.log("Fallback Buses found (with staCode):", allBuses);
-                        setMapBuses(allBuses);
-                        found = true;
-                    }
-                 }
-             }
-             if (!found && activeRouteRef.current === rNo) setMapBuses([]);
-        }
-
-        // Fetch Traffic INDEPENDENTLY of location success/fail
-        try {
-            const traffic = await fetchTrafficApi(rNo.replace(/^0+/, ''), dir);
-            if (activeRouteRef.current === rNo) setTrafficData(traffic);
-        } catch (tErr) {
-            console.log("Traffic fetch failed:", tErr);
-        }
-      } catch (e) {
-          console.error("Map Bus Fetch Error:", e);
-          if (activeRouteRef.current === rNo) setMapBuses([]);
-      }
-  };
+  // Note: fetchRealtimeBus and fetchBusLocation are now provided by useRouteData hook
 
   const toggleDirection = async () => {
       const newDir = direction === '0' ? '1' : '0';
