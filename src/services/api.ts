@@ -4,21 +4,11 @@ import { generateDsatToken } from '../utils/dsatCrypto';
 
 const isDev = import.meta.env.DEV;
 
-// Helper to construct URL based on environment
-const getUrl = (endpoint, isOfficial = false) => {
-    // Official mirror for Traffic/Map (cors-anywhere) vs Web Proxy
-    if (isOfficial) {
-         return isDev 
-            ? endpoint 
-            : `https://cors-anywhere.herokuapp.com/https://bis.dsat.gov.mo:37812${endpoint}`;
-    }
-    // Standard endpoints
-    return isDev ? endpoint : `https://cors-anywhere.herokuapp.com/https://bis.dsat.gov.mo:37812${endpoint}`;
-};
+
 
 
 // 1. Fetch Route List (Stops)
-export const fetchRouteDataApi = async (rNo, dir) => {
+export const fetchRouteDataApi = async (rNo: string, dir: string) => {
     const params = {
         routeName: rNo,
         dir: dir,
@@ -49,7 +39,7 @@ export const fetchRouteDataApi = async (rNo, dir) => {
 };
 
 // 2. Fetch Traffic Data
-export const fetchTrafficApi = async (rNoRaw, dir) => {
+export const fetchTrafficApi = async (rNoRaw: string | number, dir: string) => {
     try {
         const routeCodePadded = rNoRaw.toString().padStart(5, '0'); 
         
@@ -83,10 +73,10 @@ export const fetchTrafficApi = async (rNoRaw, dir) => {
         if (response.data && Array.isArray(response.data.data)) {
              const dataList = response.data.data;
              // Map data to segments
-             const segments = dataList.map(item => {
+             const segments = dataList.map((item: any) => {
                  let coords = [];
                  if (item.routeCoordinates) {
-                     coords = item.routeCoordinates.split(';').filter(s => s).map(pair => {
+                     coords = item.routeCoordinates.split(';').filter((s: string) => s).map((pair: string) => {
                          const [lon, lat] = pair.split(',');
                          return [parseFloat(lat), parseFloat(lon)];
                      });
@@ -111,7 +101,7 @@ export const fetchTrafficApi = async (rNoRaw, dir) => {
 
 // 3. Fetch Realtime Bus (List View)
 // Returns nested object { type: '0', data: ... } or error
-export const fetchBusListApi = async (rNo, dir, routeType) => {
+export const fetchBusListApi = async (rNo: string, dir: string, routeType: string) => {
       const params = {
           action: 'dy',
           routeName: rNo,
@@ -143,7 +133,7 @@ export const fetchBusListApi = async (rNo, dir, routeType) => {
 };
 
 // 4. Fetch Map Location (GPS)
-export const fetchMapLocationApi = async (rNo, dir) => {
+export const fetchMapLocationApi = async (rNo: string, dir: string) => {
       const routeCodePadded = rNo.trim().toString().padStart(5, '0');
       
       const params = {

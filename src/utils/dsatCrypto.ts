@@ -1,16 +1,16 @@
 
-import jsMd5 from 'js-md5';
+import { md5 } from 'js-md5';
 
 // Reverse-engineered Token Logic
-export const generateDsatToken = (params) => {
+export const generateDsatToken = (params: Record<string, any>) => {
     let queryString = "";
     Object.keys(params).forEach((key, index) => {
         queryString += (index === 0 ? "" : "&") + key + "=" + params[key];
     });
     
-    const dirtyHash = jsMd5(queryString);
+    const dirtyHash = md5(queryString);
     const date = new Date();
-    const pad = (n) => n.toString().padStart(2, '0');
+    const pad = (n: number) => n.toString().padStart(2, '0');
     const YYYY = date.getFullYear();
     const MM = pad(date.getMonth() + 1);
     const DD = pad(date.getDate());

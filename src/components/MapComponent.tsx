@@ -17,7 +17,7 @@ let DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 // Custom Bus Icon
-const createBusIcon = (bus) => {
+const createBusIcon = (bus: any) => {
     // Determine color based on busType
     // 1=Large (Blue), 2=Medium (Green), 3=Small (Purple)
     // Fallback: Blue
@@ -47,7 +47,7 @@ const createBusIcon = (bus) => {
 };
 
 // Component to auto-fit bounds
-const FitBounds = ({ stations, buses }) => {
+const FitBounds = ({ stations, buses }: { stations: any[], buses: any[] }) => {
     const map = useMap();
     const hasFitRef = React.useRef(false);
 
@@ -60,12 +60,17 @@ const FitBounds = ({ stations, buses }) => {
 
         // Only fit bounds if we haven't done so yet, and we have valid stations (or buses as fallback)
         if (!hasFitRef.current && (validStations.length > 0 || validBuses.length > 0)) {
-            const bounds = L.latLngBounds();
-            validStations.forEach(s => bounds.extend([s.latitude, s.longitude]));
-            validBuses.forEach(b => bounds.extend([b.latitude || b.lat, b.longitude || b.lon || b.lng]));
-            if (bounds.isValid()) {
-                map.fitBounds(bounds, { padding: [20, 20] });
-                hasFitRef.current = true; // Mark as fitted
+            const points: L.LatLngExpression[] = [
+                ...validStations.map(s => [s.latitude, s.longitude] as [number, number]),
+                ...validBuses.map(b => [b.latitude || b.lat, b.longitude || b.lon || b.lng] as [number, number])
+            ];
+            
+            if (points.length > 0) {
+                 const bounds = L.latLngBounds(points);
+                 if (bounds.isValid()) {
+                    map.fitBounds(bounds, { padding: [20, 20] });
+                    hasFitRef.current = true; // Mark as fitted
+                 }
             }
         }
     }, [stations, buses, map]);
@@ -79,7 +84,13 @@ const FitBounds = ({ stations, buses }) => {
     return null;
 };
 
-const MapComponent = ({ stations, buses, traffic }) => {
+interface MapComponentProps {
+  stations: any[];
+  buses: any[];
+  traffic: any[];
+}
+
+const MapComponent: React.FC<MapComponentProps> = ({ stations, buses, traffic }) => {
   // Hydrate stations with coordinates from Traffic Data (if available)
   // Traffic data is an array of segments. Segment i usually starts at Station i.
   const hydratedStations = stations.map((station, i) => {
@@ -109,7 +120,7 @@ const MapComponent = ({ stations, buses, traffic }) => {
         />
         
         {/* Traffic / Route Polylines */}
-        {traffic && traffic.map((seg, idx) => {
+        {traffic && traffic.map((seg: any, idx: number) => {
             if (!seg.path || seg.path.length < 2) return null;
             const color = seg.traffic == 1 ? "green" 
                         : seg.traffic == 2 ? "orange" 
@@ -119,7 +130,7 @@ const MapComponent = ({ stations, buses, traffic }) => {
         })}
 
         {/* Stations */}
-        {hydratedStations.map((stop, idx) => {
+        {hydratedStations.map((stop: any, idx: number) => {
            const color = stop.trafficLevel == 1 ? "green" 
                        : stop.trafficLevel == 2 ? "orange" 
                        : stop.trafficLevel >= 3 ? "red" 
@@ -134,7 +145,6 @@ const MapComponent = ({ stations, buses, traffic }) => {
              color={color}
              weight={2}
              fillOpacity={1}
-             zIndexOffset={100}
            >
              <Popup>
                <div className="text-center">
@@ -147,7 +157,7 @@ const MapComponent = ({ stations, buses, traffic }) => {
         })}
 
         {/* Real-time Buses */}
-        {buses.map((bus, idx) => {
+        {buses.map((bus: any, idx: number) => {
             let lat = parseFloat(bus.latitude || bus.lat);
             let lon = parseFloat(bus.longitude || bus.lon || bus.lng);
             

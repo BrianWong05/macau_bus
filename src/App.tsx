@@ -3,16 +3,16 @@ import MapComponent from './components/MapComponent';
 import BusList from './components/BusList';
 import RouteDashboard from './components/RouteDashboard';
 import NearbyStops from './components/NearbyStops';
-import { useRouteData, AppHeader, RouteControls, RouteStatusBanner } from './features/route-tracker';
-import { fetchTrafficApi } from './services/api';
+import { useRouteData, AppHeader, RouteControls, RouteStatusBanner } from '@/features/route-tracker';
+import { fetchTrafficApi } from '@/services/api';
 
 function App() {
   const [routeNo, setRouteNo] = useState(''); // Input value
   const [activeRoute, setActiveRoute] = useState(''); // Actual confirmed route for fetching
   const [direction, setDirection] = useState('0'); // '0' or '1'
-  const [viewMode, setViewMode] = useState('list'); // 'list' | 'map'
+  const [viewMode, setViewMode] = useState<'dashboard' | 'list' | 'map'>('dashboard'); // 'list' | 'map'
   const [showNearby, setShowNearby] = useState(false);
-  const [scrollToStop, setScrollToStop] = useState(null);
+  const [scrollToStop, setScrollToStop] = useState<string | null>(null);
 
   // Use extracted hook for route data management
   const {
@@ -35,7 +35,9 @@ function App() {
     activeRouteRef,
   } = useRouteData();
 
-  const stopsRef = useRef([]);
+  // Import BusStop type or define it. Since it is not imported yet, let's import it first or use any for now but imports are better.
+  // I will add import in the next step.
+  const stopsRef = useRef<any[]>([]);
 
   useEffect(() => {
       activeRouteRef.current = activeRoute;
@@ -58,7 +60,8 @@ function App() {
               if (!el) {
                   // Try to find by base code (e.g., T309 matches T309-1)
                   const allStops = document.querySelectorAll('[id^="stop-"]');
-                  for (const stopEl of allStops) {
+                  for (let i = 0; i < allStops.length; i++) {
+                      const stopEl = allStops[i] as HTMLElement;
                       const stopBase = stopEl.id.replace('stop-', '').split(/[/_-]/)[0];
                       if (stopBase === baseCode) {
                           el = stopEl;
@@ -82,7 +85,7 @@ function App() {
       setActiveRoute('');
       setMapBuses([]);
       setTrafficData([]);
-      setViewMode('list');
+      setViewMode('dashboard');
       setHasOppositeDirection(true);
   };
 
@@ -91,7 +94,7 @@ function App() {
     executeSearch(routeNo, direction);
   };
 
-  const handleSelectRoute = (route, dir = '0') => {
+  const handleSelectRoute = (route: string, dir = '0') => {
       setRouteNo(route);
       setDirection(dir);
       setActiveRoute(route); // Sync local state
@@ -120,10 +123,9 @@ function App() {
       }, [busData]);
 
       useEffect(() => {
-          // Reset data on route/dir swap
           // setBusData(...); // Managed by logic
 
-          let interval;
+          let interval: ReturnType<typeof setInterval>;
           // Depend on activeRoute!
           if (activeRoute) {
               // Guard: If we are switching directions (busData.direction matches OLD, direction matches NEW), 
@@ -142,7 +144,7 @@ function App() {
                      
                      // Also fetch traffic for List View coloring
                      fetchTrafficApi(activeRoute.replace(/^0+/, ''), direction)
-                        .then(traffic => {
+                        .then((traffic: any) => {
                             if (activeRouteRef.current === activeRoute) setTrafficData(traffic);
                         })
                         .catch(console.error);
@@ -158,10 +160,10 @@ function App() {
 
                       // Refresh Traffic too
                       fetchTrafficApi(activeRoute.replace(/^0+/, ''), direction)
-                       .then(traffic => {
+                       .then((traffic: any) => {
                            if (activeRouteRef.current === activeRoute) setTrafficData(traffic);
                        })
-                       .catch(e => console.error("Traffic interval error:", e));
+                       .catch((e: any) => console.error("Traffic interval error:", e));
                    }
               }, 3000); // 3-second refresh
           }
@@ -200,7 +202,7 @@ function App() {
           onShowNearby={() => setShowNearby(true)}
           onResetToHome={() => {
             setBusData(null);
-            setTrafficData(null);
+            setTrafficData([]);
             setActiveRoute('');
             setRouteNo('');
             setShowNearby(false);
@@ -234,7 +236,7 @@ function App() {
                     
                      {/* Controls Bar & Refresh */}
                      <RouteControls
-                       viewMode={viewMode}
+                       viewMode={viewMode as 'list' | 'map'}
                        onViewModeChange={setViewMode}
                        direction={direction}
                        hasOppositeDirection={hasOppositeDirection}

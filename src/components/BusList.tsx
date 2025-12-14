@@ -1,8 +1,10 @@
 
 import React from 'react';
 
+
+
 // Helper to map busType
-const getBusTypeLabel = (type) => {
+const getBusTypeLabel = (type: string) => {
     switch(type) {
         case '1': return 'Large'; // 大巴
         case '2': return 'Medium'; // 中巴
@@ -11,7 +13,12 @@ const getBusTypeLabel = (type) => {
     }
 };
 
-const BusList = ({ stops, trafficData }) => {
+interface BusListProps {
+  stops: any[];
+  trafficData: any[]; // Using any[] for now as per user instruction "change all jsx to tsx" sometimes implies loose typing first, but better to use BusStop and TrafficSegment if available.
+}
+
+const BusList: React.FC<BusListProps> = ({ stops, trafficData }) => {
     return (
         <div className="pb-10">
             {stops.map((stop, index) => {
@@ -23,7 +30,7 @@ const BusList = ({ stops, trafficData }) => {
                         
                         {/* Col 1: Bus Info (Right Aligned) */}
                         <div className="flex flex-col items-end gap-2 py-2">
-                            {stop.buses.length > 0 && stop.buses.map((bus, bi) => (
+                            {stop.buses.length > 0 && stop.buses.map((bus: any, bi: number) => (
                                 <div key={bi} className={`flex flex-col items-end gap-1 w-full animate-in fade-in slide-in-from-right-4 duration-300 
                                     ${bus.status === '0' ? 'mt-16' : 'mt-6'} 
                                 `}>
@@ -70,7 +77,7 @@ const BusList = ({ stops, trafficData }) => {
                             )}
                              {/* Stop Dot */}
                              <div className={`relative z-10 w-3.5 h-3.5 rounded-full border-2 bg-white ${
-                                stop.buses.some(b => b.status === '1') 
+                                stop.buses.some((b: any) => b.status === '1') 
                                 ? 'border-blue-500 ring-2 ring-blue-200'
                                 : segmentTraffic >= 3 
                                   ? 'border-red-500' 

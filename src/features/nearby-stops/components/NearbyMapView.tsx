@@ -6,8 +6,17 @@ import React from 'react';
 import { MapContainer, TileLayer, Marker, Popup, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
 import { NearbyFitBounds } from './NearbyFitBounds';
+import { NearbyStop, MapBus } from '../types';
 
-export const NearbyMapView = ({
+interface NearbyMapViewProps {
+  userLocation: { lat: number; lon: number };
+  nearbyStops: NearbyStop[];
+  stopBuses: MapBus[];
+  expandedStop: string | null;
+  onStopSelect: (stop: NearbyStop) => void;
+}
+
+export const NearbyMapView: React.FC<NearbyMapViewProps> = ({
   userLocation,
   nearbyStops,
   stopBuses,

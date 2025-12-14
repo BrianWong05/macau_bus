@@ -2,7 +2,11 @@
 import React, { useState } from 'react';
 import { ALL_ROUTES } from '../data/routes';
 
-const RouteDashboard = ({ onSelectRoute }) => {
+interface RouteDashboardProps {
+  onSelectRoute: (route: string) => void;
+}
+
+const RouteDashboard: React.FC<RouteDashboardProps> = ({ onSelectRoute }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredRoutes = ALL_ROUTES.filter(route => 

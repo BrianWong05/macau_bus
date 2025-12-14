@@ -25,6 +25,14 @@ export interface BusInfo {
   currentStop: string;
 }
 
+export interface MapBus {
+  busPlate: string;
+  latitude: number;
+  longitude: number;
+  route?: string;
+  dir?: string;
+}
+
 export interface RouteEtaInfo {
   buses: BusInfo[];
   destination: string;

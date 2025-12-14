@@ -15,16 +15,23 @@ let DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 // Feature imports
+// Feature imports
 import { NearbyStopsHeader } from '../features/nearby-stops/components/NearbyStopsHeader';
-import { NearbyMapView } from '../features/nearby-stops/components/NearbyMapView.jsx';
-import { NearbyStopsList } from '../features/nearby-stops/components/NearbyStopsList.jsx';
+import { NearbyMapView } from '../features/nearby-stops/components/NearbyMapView';
+import { NearbyStopsList } from '../features/nearby-stops/components/NearbyStopsList';
 import { useArrivalData } from '../features/nearby-stops/hooks/useArrivalData';
 import { useNearbyDiscovery } from '../features/nearby-stops/hooks/useNearbyDiscovery';
 import { LoadingState, ErrorState } from './shared';
+import { NearbyStop } from '../features/nearby-stops/types';
 
-const NearbyStops = ({ onClose, onSelectRoute }) => {
-  const [expandedStop, setExpandedStop] = useState(null);
-  const [viewMode, setViewMode] = useState('list'); 
+interface NearbyStopsProps {
+  onClose: () => void;
+  onSelectRoute: (route: string, stopCode: string | null, dir?: string | null) => void;
+}
+
+const NearbyStops: React.FC<NearbyStopsProps> = ({ onClose, onSelectRoute }) => {
+  const [expandedStop, setExpandedStop] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list'); 
   
   // Use extracted hooks
   const { nearbyStops, loading, error, permissionDenied, userLocation, refresh } = useNearbyDiscovery();
@@ -32,7 +39,7 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
 
   // Auto-Refresh Effect
   useEffect(() => {
-      let intervalId;
+      let intervalId: ReturnType<typeof setInterval>;
       if (expandedStop) {
           fetchStopData(expandedStop);
           intervalId = setInterval(() => {
@@ -44,7 +51,7 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
       };
   }, [expandedStop, fetchStopData]);
 
-  const handleExpandStop = (stop) => {
+  const handleExpandStop = (stop: NearbyStop) => {
       if (expandedStop === stop.code) {
           setExpandedStop(null);
       } else {

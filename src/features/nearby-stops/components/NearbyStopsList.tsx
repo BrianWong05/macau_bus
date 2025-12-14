@@ -1,12 +1,21 @@
-/**
- * NearbyStopsList - List view of nearby stops with expandable ETA cards
- */
-
 import React from 'react';
 import { formatDistance } from '../../../utils/distance';
 import { getEtaTextColor } from '../../../utils/etaColors';
+import { NearbyStop, ArrivalData } from '../types';
 
-export const NearbyStopsList = ({
+interface NearbyStopsListProps {
+  nearbyStops: NearbyStop[];
+  expandedStop: string | null;
+  arrivalData: ArrivalData;
+  loadingArrivals: Record<string, boolean>;
+  lastUpdated: Date | null;
+  permissionDenied: boolean;
+  onExpandStop: (stop: NearbyStop) => void;
+  onSelectRoute: (route: string, stopCode: string, dir: string | null) => void;
+  onClose: () => void;
+}
+
+export const NearbyStopsList: React.FC<NearbyStopsListProps> = ({
   nearbyStops,
   expandedStop,
   arrivalData,
@@ -109,7 +118,7 @@ export const NearbyStopsList = ({
                       <div 
                         key={route} 
                         className="bg-white rounded-lg border overflow-hidden cursor-pointer hover:border-teal-300 hover:shadow-md transition"
-                        onClick={(e) => { e.stopPropagation(); onSelectRoute(route, stop.code, info.direction); onClose(); }}
+                        onClick={(e) => { e.stopPropagation(); onSelectRoute(route, stop.code, info.direction || null); onClose(); }}
                       >
                         {/* Header */}
                         <div className="flex items-center justify-between p-3 border-b bg-gradient-to-r from-gray-50 to-white">
@@ -136,7 +145,7 @@ export const NearbyStopsList = ({
                           )}
                           {status === 'active' && buses && buses.length > 0 && (
                             <div className="space-y-2">
-                              {buses.map((bus, idx) => (
+                              {buses.map((bus: any, idx: number) => (
                                 <div key={idx} className="flex items-center justify-between bg-gray-50 rounded-lg p-2">
                                   <div className="flex items-center gap-2">
                                     <span className="text-base">🚌</span>

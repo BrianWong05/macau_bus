@@ -7,17 +7,9 @@ import { fetchBusListApi, fetchMapLocationApi, fetchTrafficApi } from '../../../
 import { getDistanceFromLatLonInKm } from '../../../utils/distance';
 import { getStopCoords, getStopName } from '../../../utils/stopCodeMatcher';
 import govData from '../../../data/gov_data.json';
-import type { ArrivalData, RouteEtaInfo } from '../types';
+import type { ArrivalData, RouteEtaInfo, MapBus } from '../types';
 
 const stopsData = govData.stops;
-
-interface MapBus {
-  busPlate: string;
-  latitude: number;
-  longitude: number;
-  route?: string;
-  dir?: string;
-}
 
 interface UseArrivalDataReturn {
   arrivalData: ArrivalData;
