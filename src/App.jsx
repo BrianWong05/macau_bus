@@ -18,6 +18,7 @@ function App() {
   const [trafficData, setTrafficData] = useState([]); // Traffic Info (Array of Segments)
   const [lastUpdated, setLastUpdated] = useState(null);
   const [showNearby, setShowNearby] = useState(false); // Last successful fetch time
+  const [scrollToStop, setScrollToStop] = useState(null); // Stop code to scroll to after load
 
   // Ref to track active route for preventing race conditions (async fetches returning after route switch)
   const activeRouteRef = useRef('');
@@ -94,6 +95,40 @@ function App() {
     }
   };
 
+  // Scroll to target stop when data loads
+  useEffect(() => {
+      if (scrollToStop && busData && busData.stops) {
+          // Small delay to ensure DOM is rendered
+          setTimeout(() => {
+              // Normalize the stop code for ID matching
+              const normalizedCode = scrollToStop.replace(/[/_]/g, '-');
+              const baseCode = scrollToStop.split(/[/_-]/)[0];
+              
+              // Try multiple ID formats
+              let el = document.getElementById(`stop-${scrollToStop}`);
+              if (!el) el = document.getElementById(`stop-${normalizedCode}`);
+              if (!el) {
+                  // Try to find by base code (e.g., T309 matches T309-1)
+                  const allStops = document.querySelectorAll('[id^="stop-"]');
+                  for (const stopEl of allStops) {
+                      const stopBase = stopEl.id.replace('stop-', '').split(/[/_-]/)[0];
+                      if (stopBase === baseCode) {
+                          el = stopEl;
+                          break;
+                      }
+                  }
+              }
+              
+              if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  el.classList.add('ring-2', 'ring-teal-400');
+                  setTimeout(() => el.classList.remove('ring-2', 'ring-teal-400'), 2000);
+              }
+              setScrollToStop(null);
+          }, 500);
+      }
+  }, [scrollToStop, busData]);
+
   const handleBack = () => {
       setBusData(null);
       setActiveRoute('');
@@ -107,11 +142,11 @@ function App() {
     executeSearch(routeNo, direction);
   };
 
-  const handleSelectRoute = (route) => {
+  const handleSelectRoute = (route, dir = '0') => {
       setRouteNo(route);
-      setDirection('0');
+      setDirection(dir);
       setViewMode('list');
-      executeSearch(route, '0');
+      executeSearch(route, dir);
   };
   
   const fetchRealtimeBus = async (rNo, dir, currentStops) => {
@@ -422,8 +457,9 @@ function App() {
             {showNearby && (
                 <NearbyStops 
                     onClose={() => setShowNearby(false)}
-                    onSelectRoute={(route) => {
-                        handleSelectRoute(route);
+                    onSelectRoute={(route, stopCode, dir) => {
+                        handleSelectRoute(route, dir || '0');
+                        if (stopCode) setScrollToStop(stopCode);
                         setShowNearby(false);
                     }}
                 />

@@ -19,7 +19,7 @@ const BusList = ({ stops, trafficData }) => {
                 const segmentTraffic = trafficData && trafficData[index] ? trafficData[index].traffic : 0;
                 
                 return (
-                    <div key={stop.busstopcode || index} className="grid grid-cols-[140px_24px_1fr] gap-x-2 min-h-[80px]">
+                    <div key={stop.busstopcode || index} id={`stop-${stop.staCode}`} className="grid grid-cols-[140px_24px_1fr] gap-x-2 min-h-[80px] transition-all duration-300">
                         
                         {/* Col 1: Bus Info (Right Aligned) */}
                         <div className="flex flex-col items-end gap-2 py-2">

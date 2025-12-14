@@ -369,7 +369,8 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                               currentStopIdx: stopIdx,
                               status: status,
                               minStops: minStops,
-                              minEta: minTimeEst
+                              minEta: minTimeEst,
+                              direction: d  // Track which direction this stop was found in
                           };
 
                          // 2. Fetch GPS for Map (If there are incoming buses)
@@ -587,7 +588,7 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                                                         <div 
                                                             key={route} 
                                                             className="bg-white p-3 rounded-lg border cursor-pointer hover:border-teal-300 transition"
-                                                            onClick={(e) => { e.stopPropagation(); onSelectRoute(route); onClose(); }}
+                                                            onClick={(e) => { e.stopPropagation(); onSelectRoute(route, stop.code, null); onClose(); }}
                                                         >
                                                             <div className="font-bold text-lg text-gray-700">{route}</div>
                                                             <div className={`text-xs font-semibold ${active ? 'text-green-600' : 'text-gray-400'}`}>{strInfo}</div>
@@ -620,7 +621,7 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                                                     <div 
                                                         key={route} 
                                                         className="bg-white rounded-lg border overflow-hidden cursor-pointer hover:border-teal-300 hover:shadow-md transition"
-                                                        onClick={(e) => { e.stopPropagation(); onSelectRoute(route); onClose(); }}
+                                                        onClick={(e) => { e.stopPropagation(); onSelectRoute(route, stop.code, info.direction); onClose(); }}
                                                     >
                                                         {/* Header: Route + Destination */}
                                                         <div className="flex items-center justify-between p-3 border-b bg-gradient-to-r from-gray-50 to-white">
