@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, CircleMarker, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -22,34 +22,52 @@ const stopsData = govData.stops;
 // Helper component to auto-fit bounds
 const NearbyFitBounds = ({ center, stops, buses, expandedStop }) => {
     const map = useMap();
+    const lastExpandedStop = useRef(null);
+    const hasCentered = useRef(false);
+
     useEffect(() => {
         if (!map) return;
         const bounds = L.latLngBounds();
         
+        // Logical Check: Should we zoom?
+        // 1. If expandedStop changed (User clicked a new stop)
+        // 2. If initial load (User hasn't moved yet)
+        
+        const isNewSelection = expandedStop !== lastExpandedStop.current;
+        
         if (expandedStop) {
-            // Priority 1: Focus on Selected Stop
-             const stop = stops.find(s => s.code === expandedStop);
-             if (stop) {
-                 bounds.extend([stop.lat, stop.lon]);
-                 // Also include buses if they exist
-                 if (buses && buses.length > 0) {
-                     buses.forEach(b => {
-                         if (b.latitude && b.longitude) bounds.extend([b.latitude, b.longitude]);
-                     });
+            // Only zoom if this is a NEW selection. 
+            // If it's the SAME stop updating (auto-refresh), DO NOT zoom.
+             if (isNewSelection) {
+                 const stop = stops.find(s => s.code === expandedStop);
+                 if (stop) {
+                     bounds.extend([stop.lat, stop.lon]);
+                     // We can include buses here if we want initial fit to include them, 
+                     // but if we want to be stable, maybe just focusing on the stop is safer?
+                     // Or we include buses ONLY on first zoom.
+                     if (buses && buses.length > 0) {
+                         buses.forEach(b => {
+                             if (b.latitude && b.longitude) bounds.extend([b.latitude, b.longitude]);
+                         });
+                     }
+                     if (bounds.isValid()) {
+                         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
+                     }
+                     lastExpandedStop.current = expandedStop;
                  }
-                 // If only stop is there, specific zoom? 
-                 // fitBounds will handle it, but maybe we want checking if bounds is just one point?
-                 // Leaflet fitBounds on single point works but might be max zoom.
              }
-        } else if (center && stops.length > 0) {
+        } else if (center && stops.length > 0 && !hasCentered.current) {
+            // Initial center on user location
             bounds.extend([center.lat, center.lon]);
             stops.forEach(s => bounds.extend([s.lat, s.lon]));
+            
+            if (bounds.isValid()) {
+                map.fitBounds(bounds, { padding: [50, 50] });
+                hasCentered.current = true;
+            }
         }
         
-        if (bounds.isValid()) {
-            map.fitBounds(bounds, { padding: [50, 50] });
-        }
-    }, [center, stops, map, expandedStop, buses]);
+    }, [center, stops, map, expandedStop, buses]); // Dependencies kept, but logic gates execution
     return null;
 };
 
@@ -154,22 +172,40 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
       return `${km.toFixed(1)}km`;
   }
 
-  const handleExpandStop = async (stop) => {
-      if (expandedStop === stop.code) {
-          setExpandedStop(null);
-          setStopBuses([]); 
+  // New Fetch Logic (Separated from Event Handler)
+  const fetchStopData = async (stopCode) => {
+      // Fix: Normalize lookup because raw data might use underscores/hyphens while state uses slashes
+      const stop = stopsData.find(s => {
+          const raw = s.code || s.raw?.P_ALIAS || s.raw?.ALIAS || "";
+          return raw.replace(/[_-]/g, '/') === stopCode;
+      });
+      
+      if (!stop) {
+          setLoadingArrivals(prev => ({...prev, [stopCode]: false}));
           return;
       }
-      setExpandedStop(stop.code);
-      setLoadingArrivals(prev => ({...prev, [stop.code]: true}));
-      setArrivalData(prev => ({...prev, [stop.code]: {} })); 
-      setStopBuses([]); // Clear previous buses
 
+      // Don't clear previous data immediately to avoid flash, just set loading overlay if needed
+      // But we do want to show "updating..."? Maybe not necessary for auto-refresh.
+      // For initial load, we do want loading state.
+      // Let's rely on loadingArrivals for initial load only?
+      // Or we can check if data exists.
+      
       try {
-          const newArrivals = {};
-          let allIncomingBuses = [];
+           const newArrivals = {};
+           let allIncomingBuses = [];
 
-          await Promise.all(stop.routes.map(async (route) => {
+            // Fix warnings: Parse routes from raw string if they don't exist on the object
+            let stopRoutes = stop.routes;
+            if (!stopRoutes || stopRoutes.length === 0) {
+                 if (stop.raw && stop.raw.ROUTE_NOS) {
+                     stopRoutes = [...new Set(stop.raw.ROUTE_NOS.split(',').map(r => r.trim()))];
+                 } else {
+                     stopRoutes = [];
+                 }
+            }
+
+           await Promise.all(stopRoutes.map(async (route) => {
                const checkDir = async (d) => {
                    try {
                      const [res2, res0] = await Promise.all([
@@ -183,7 +219,8 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                      const findStopIndex = (stops) => {
                          return stops.findIndex(s => {
                              const sCode = (s.staCode || "").replace(/\//g, '-').replace(/_/g, '-');
-                             const target = (stop.code || "").replace(/\//g, '-').replace(/_/g, '-');
+                             // Fix: Use stopCode argument instead of stop.code from closure
+                             const target = (stopCode || "").replace(/\//g, '-').replace(/_/g, '-');
                              const targetBase = target.split('-')[0];
                              if (sCode === target) return true;
                              if (sCode === targetBase || sCode.split('-')[0] === targetBase) return true;
@@ -276,13 +313,59 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                else { newArrivals[route] = "No Service / Wrong Sta"; }
           }));
 
-          setArrivalData(prev => ({...prev, [stop.code]: newArrivals }));
-          setStopBuses(allIncomingBuses);
+           // Update state with new data
+           // Use functional update to ensure no stale state if multiple race
+           setArrivalData(prev => ({...prev, [stopCode]: newArrivals }));
+           setStopBuses(allIncomingBuses);
 
       } catch (err) {
-          console.error("Arrival fetch failed", err);
+           console.error("Arrival fetch failed", err);
       } finally {
-          setLoadingArrivals(prev => ({...prev, [stop.code]: false}));
+           setLoadingArrivals(prev => ({...prev, [stopCode]: false}));
+      }
+  };
+
+  // Auto-Refresh Effect
+  useEffect(() => {
+      let intervalId;
+      if (expandedStop) {
+          // Initial Fetch
+          // Only start loading spinner if we don't have data yet?
+          setLoadingArrivals(prev => ({...prev, [expandedStop]: true}));
+          fetchStopData(expandedStop);
+
+          // Interval Fetch (every 5 seconds)
+          intervalId = setInterval(() => {
+              fetchStopData(expandedStop);
+          }, 5000);
+      } else {
+          setStopBuses([]);
+      }
+
+      return () => {
+          if (intervalId) clearInterval(intervalId);
+      };
+  }, [expandedStop]);
+
+  const handleExpandStop = (stop) => {
+      if (expandedStop === stop.code) {
+          setExpandedStop(null);
+      } else {
+          setExpandedStop(stop.code);
+          // State clearing is now handled by effect or assumed fresh
+          // We can optionally clear old data here if we want fresh start visual
+          setArrivalData(prev => ({...prev, [stop.code]: {} })); 
+          setStopBuses([]);
+      }
+  };
+
+  const handleManualRefresh = () => {
+      if (expandedStop) {
+          setLoadingArrivals(prev => ({...prev, [expandedStop]: true}));
+          fetchStopData(expandedStop);
+      } else if (userLocation) {
+          setLoading(true);
+          findNearby(userLocation.lat, userLocation.lon);
       }
   };
 
@@ -294,7 +377,14 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
             <h2 className="text-xl font-bold flex items-center gap-2 text-gray-800">
                 📍 Nearby Stops
             </h2>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+                 <button 
+                    onClick={handleManualRefresh}
+                    className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full transition-colors active:scale-95"
+                    title="Refresh Data"
+                 >
+                    🔄
+                 </button>
                  <div className="flex bg-gray-200 rounded-lg p-1 text-xs font-semibold">
                     <button 
                         className={`px-3 py-1 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow text-teal-600' : 'text-gray-500 hover:text-gray-700'}`}
