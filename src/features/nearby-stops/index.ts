@@ -6,6 +6,7 @@
 export { RouteEtaCard } from './components/RouteEtaCard';
 export { StopCard } from './components/StopCard';
 export { NearbyFitBounds } from './components/NearbyFitBounds';
+export { NearbyStopsHeader } from './components/NearbyStopsHeader';
 
 // Hooks
 export { useNearbyStops } from './hooks/useNearbyStops';
