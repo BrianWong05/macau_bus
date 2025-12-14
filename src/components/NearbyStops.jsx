@@ -326,8 +326,8 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                                           // else 🟢 Smooth = 1.0
                                       }
                                       
-                                      // Base: 5 min/km, adjusted by traffic
-                                      totalTime += segmentDistKm * 5.0 * trafficMultiplier;
+                                      // Base: 1.5 min/km (~40 km/h), adjusted by traffic
+                                      totalTime += segmentDistKm * 1.5 * trafficMultiplier;
                                   }
                               }
                               return totalTime;
