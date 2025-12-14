@@ -82,6 +82,7 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
   const [userLocation, setUserLocation] = useState(null);
   const [viewMode, setViewMode] = useState('list'); 
   const [stopBuses, setStopBuses] = useState([]); // Buses heading to expanded stop
+  const [lastUpdated, setLastUpdated] = useState(null); // Timestamp of last data fetch
 
   // ... (useEffect for geolocation) ...
   useEffect(() => {
@@ -246,85 +247,130 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
 
                      if (bestStops && bestIdx !== -1) {
                          // Found valid route direction!
-                         
-                         // 1. Calculate Arrival Text
-                         const stops = bestStops;
-                         const stopIdx = bestIdx;
-                         let minStops = 999;
-                         let incomingPlates = [];
-                         let minTimeEst = 999; // Minutes
+                                                  // 1. Calculate Arrival Info (Rich Data)
+                          const stops = bestStops;
+                          const stopIdx = bestIdx;
+                          const totalStops = stops.length;
+                          let incomingBuses = []; // Array of { plate, stopsAway, eta, distanceM }
+                          let minStops = 999;
+                          let minTimeEst = 999;
 
-                         for (let i = 0; i <= stopIdx; i++) {
-                             if (stops[i].busInfo && stops[i].busInfo.length > 0) {
-                                 const dist = stopIdx - i;
-                                 if (dist < minStops) {
-                                     minStops = dist;
-                                     
-                                     // Path-Based Distance Calculation
-                                     // Sum distances from Current Bus Stop (i) to Target Stop (stopIdx)
-                                     let pathDistKm = 0;
-                                     
-                                     // Helper to find coords from local JSON data
-                                     const getCoords = (s) => {
-                                         // API code: "T308-3", Local: "T308/3" or vice versa. Normalize.
-                                         const code = (s.staCode || "").replace(/-/g, '/').replace(/_/g, '/');
-                                         // Try exact match first
-                                         let match = stopsData.find(local => local.code === code);
-                                         // If not, try base match?
-                                         if (!match) {
-                                            const base = code.split('/')[0];
-                                            match = stopsData.find(local => local.code === base);
-                                         }
-                                         return match ? { lat: match.lat, lon: match.lon } : null;
-                                     };
+                          // Helper to find coords from local JSON data
+                          // API staCode examples: "M11-1", "T308/3", "M11"
+                          // Local JSON: raw.P_ALIAS = "M11_1", raw.ALIAS = "M11"
+                          const getCoords = (s) => {
+                              const staCode = (s.staCode || "").replace(/[-_]/g, '/').toUpperCase();
+                              const staBase = staCode.split('/')[0];
+                              
+                              // Try to find matching stop in local data
+                              let match = stopsData.find(local => {
+                                  // Normalize P_ALIAS: "M11_1" -> "M11/1"
+                                  const pAlias = (local.raw?.P_ALIAS || "").replace(/[-_]/g, '/').toUpperCase();
+                                  // Normalize ALIAS: "M11"
+                                  const alias = (local.raw?.ALIAS || "").toUpperCase();
+                                  
+                                  // Try exact match on P_ALIAS first
+                                  if (pAlias === staCode) return true;
+                                  // Try exact match on ALIAS
+                                  if (alias === staCode) return true;
+                                  // Try base match (e.g., M11 matches M11/1)
+                                  if (alias === staBase) return true;
+                                  if (pAlias.split('/')[0] === staBase) return true;
+                                  
+                                  return false;
+                              });
+                              
+                              return match ? { lat: match.lat, lon: match.lon } : null;
+                          };
 
-                                     for (let j = i; j < stopIdx; j++) {
-                                         // Distance from stops[j] to stops[j+1]
-                                         const p1 = getCoords(stops[j]);
-                                         const p2 = getCoords(stops[j+1]);
+                          // Calculate distance between two stop indices
+                          const calcPathDistance = (fromIdx, toIdx) => {
+                              let pathDistKm = 0;
+                              for (let j = fromIdx; j < toIdx; j++) {
+                                  const p1 = getCoords(stops[j]);
+                                  const p2 = getCoords(stops[j+1]);
+                                  if (p1 && p2) {
+                                     pathDistKm += getDistanceFromLatLonInKm(p1.lat, p1.lon, p2.lat, p2.lon);
+                                  }
+                              }
+                              return pathDistKm;
+                          };
 
-                                         if (p1 && p2) {
-                                            pathDistKm += getDistanceFromLatLonInKm(
-                                                p1.lat, p1.lon,
-                                                p2.lat, p2.lon
-                                            );
-                                         }
-                                     }
-                                     
-                                     // Apply Winding Factor (1.5x) for non-straight roads
-                                     pathDistKm = pathDistKm * 1.5;
+                          // Collect ALL incoming buses with individual ETAs
+                          for (let i = 0; i <= stopIdx; i++) {
+                              if (stops[i].busInfo && stops[i].busInfo.length > 0) {
+                                  const stopsAway = stopIdx - i;
+                                  const pathDistKm = calcPathDistance(i, stopIdx);
+                                  const rideTime = pathDistKm * 5.0;
+                                  const dwellTime = stopsAway * 0.5;
+                                  let eta = Math.round(rideTime + dwellTime);
+                                  if (eta === 0 && stopsAway > 0 && pathDistKm > 0.1) eta = 1;
+                                  
+                                  // Helper to get stop name from local stopsData via staCode
+                                  const getStopName = (s) => {
+                                      const staCode = (s.staCode || "").replace(/[-_]/g, '/').toUpperCase();
+                                      const staBase = staCode.split('/')[0];
+                                      
+                                      const match = stopsData.find(local => {
+                                          const pAlias = (local.raw?.P_ALIAS || "").replace(/[-_]/g, '/').toUpperCase();
+                                          const alias = (local.raw?.ALIAS || "").toUpperCase();
+                                          if (pAlias === staCode) return true;
+                                          if (alias === staCode) return true;
+                                          if (alias === staBase) return true;
+                                          if (pAlias.split('/')[0] === staBase) return true;
+                                          return false;
+                                      });
+                                      
+                                      return match ? match.name : s.staCode;
+                                  };
+                                  
+                                  stops[i].busInfo.forEach(b => {
+                                      incomingBuses.push({
+                                          plate: b.busPlate,
+                                          stopsAway: stopsAway,
+                                          currentStop: getStopName(stops[i]),
+                                          eta: eta,
+                                          distanceM: Math.round(pathDistKm * 1000)
+                                      });
+                                  });
 
-                                     // Estimate Time: 4 min per km (~15km/h effective speed on regulated path)
-                                     // + 0.5 min per stop dwell time
-                                     const rideTime = pathDistKm * 4;
-                                     const dwellTime = (stopIdx - i) * 0.5;
-                                     minTimeEst = Math.round(rideTime + dwellTime);
-                                 }
-                                 // Collect plates
-                                 stops[i].busInfo.forEach(b => incomingPlates.push(b.busPlate));
-                             }
-                         }
+                                  // Track minimum for summary
+                                  if (stopsAway < minStops) {
+                                      minStops = stopsAway;
+                                      minTimeEst = eta;
+                                  }
+                              }
+                          }
+
+                          // Sort buses by ETA (closest first), limit to 2
+                          incomingBuses.sort((a, b) => a.eta - b.eta);
+                          const topBuses = incomingBuses.slice(0, 2);
+                          const incomingPlates = incomingBuses.map(b => b.plate);
 
                          const totalActiveBuses = incomingPlates.length; // Only count incoming? No, existing logic counted all. 
                          // Logic was: const totalActiveBuses = stops.flatMap(s => s.busInfo || []).length;
                          // Let's stick strictly to arrival text logic for text.
                          const actualTotal = stops.flatMap(s => s.busInfo || []).length;
 
-                         let info;
-                         if (minStops === 999) {
-                            if (actualTotal > 0) info = "No approaching bus";
-                            else info = "No active service";
-                         } else if (minStops === 0) {
-                             info = "Arriving / At Station";
-                         } else {
-                             // Format: "3 stops (~7 min)"
-                             info = `${minStops} stops`;
-                             if (minTimeEst !== 999 && minTimeEst > 0) {
-                                 info += ` (~${minTimeEst} min)`;
-                             } else if (minTimeEst === 0) {
-                                 info += ` (< 1 min)`;
-                             }
-                         }
+                          // Get destination (last stop name)
+                          const destination = stops[stops.length - 1]?.staName || '';
+
+                          // Determine status
+                          let status = 'no-service';
+                          if (minStops === 0) status = 'arriving';
+                          else if (minStops < 999) status = 'active';
+                          else if (actualTotal > 0) status = 'no-approaching';
+
+                          // Build rich info object
+                          const info = {
+                              buses: topBuses,
+                              destination: destination,
+                              totalStops: totalStops,
+                              currentStopIdx: stopIdx,
+                              status: status,
+                              minStops: minStops,
+                              minEta: minTimeEst
+                          };
 
                          // 2. Fetch GPS for Map (If there are incoming buses)
                          // User wants only the 2 closest buses per route
@@ -366,9 +412,9 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
           }));
 
            // Update state with new data
-           // Use functional update to ensure no stale state if multiple race
            setArrivalData(prev => ({...prev, [stopCode]: newArrivals }));
            setStopBuses(allIncomingBuses);
+           setLastUpdated(new Date());
 
       } catch (err) {
            console.error("Arrival fetch failed", err);
@@ -518,21 +564,121 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
 
                             {expandedStop === stop.code && (
                                 <div className="bg-gray-50 border-t p-3 text-sm">
+                                    {/* Last Updated Timestamp */}
+                                    {lastUpdated && (
+                                        <div className="text-[10px] text-gray-400 text-right mb-2">
+                                            Updated: {lastUpdated.toLocaleTimeString()}
+                                        </div>
+                                    )}
+                                    
                                     {loadingArrivals[stop.code] ? (
                                         <div className="text-gray-500 flex items-center justify-center py-2">Loading live data...</div>
                                     ) : (
-                                        <div className="grid grid-cols-2 gap-2">
+                                        <div className="space-y-2">
                                             {stop.routes.map(route => {
-                                                const info = arrivalData[stop.code]?.[route] || "---";
-                                                const active = info.includes("stops") || info.includes("Arriving");
+                                                const info = arrivalData[stop.code]?.[route];
+                                                const isRichInfo = info && typeof info === 'object';
+                                                
+                                                // Fallback for legacy string format
+                                                if (!isRichInfo) {
+                                                    const strInfo = info || "---";
+                                                    const active = typeof strInfo === 'string' && (strInfo.includes("stops") || strInfo.includes("Arriving"));
+                                                    return (
+                                                        <div 
+                                                            key={route} 
+                                                            className="bg-white p-3 rounded-lg border cursor-pointer hover:border-teal-300 transition"
+                                                            onClick={(e) => { e.stopPropagation(); onSelectRoute(route); onClose(); }}
+                                                        >
+                                                            <div className="font-bold text-lg text-gray-700">{route}</div>
+                                                            <div className={`text-xs font-semibold ${active ? 'text-green-600' : 'text-gray-400'}`}>{strInfo}</div>
+                                                        </div>
+                                                    );
+                                                }
+
+                                                // Rich ETA Card
+                                                const { buses, destination, totalStops, currentStopIdx, status, minStops, minEta } = info;
+                                                
+                                                // Color coding based on ETA
+                                                const getEtaColor = (eta) => {
+                                                    if (eta <= 3) return 'bg-green-500';
+                                                    if (eta <= 10) return 'bg-yellow-500';
+                                                    return 'bg-orange-500';
+                                                };
+                                                
+                                                const getEtaTextColor = (eta) => {
+                                                    if (eta <= 3) return 'text-green-600';
+                                                    if (eta <= 10) return 'text-yellow-600';
+                                                    return 'text-orange-600';
+                                                };
+
+                                                // Progress bar calculation
+                                                const progressPercent = totalStops > 0 && minStops < 999
+                                                    ? Math.round(((totalStops - minStops) / totalStops) * 100)
+                                                    : 0;
+
                                                 return (
                                                     <div 
                                                         key={route} 
-                                                        className="bg-white p-2 rounded border flex flex-col justify-between cursor-pointer hover:border-teal-300 transition"
+                                                        className="bg-white rounded-lg border overflow-hidden cursor-pointer hover:border-teal-300 hover:shadow-md transition"
                                                         onClick={(e) => { e.stopPropagation(); onSelectRoute(route); onClose(); }}
                                                     >
-                                                        <div className="font-bold text-lg text-gray-700">{route}</div>
-                                                        <div className={`text-xs font-semibold ${active ? 'text-green-600' : 'text-gray-400'}`}>{info}</div>
+                                                        {/* Header: Route + Destination */}
+                                                        <div className="flex items-center justify-between p-3 border-b bg-gradient-to-r from-gray-50 to-white">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-bold text-xl text-teal-600">{route}</span>
+                                                                {destination && (
+                                                                    <span className="text-xs text-gray-500">→ {destination}</span>
+                                                                )}
+                                                            </div>
+                                                            {status === 'arriving' && (
+                                                                <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold animate-pulse">
+                                                                    Arriving
+                                                                </span>
+                                                            )}
+                                                        </div>
+
+
+
+                                                        {/* Bus List */}
+                                                        <div className="p-3">
+                                                            {status === 'no-service' && (
+                                                                <div className="text-gray-400 text-xs">No active service</div>
+                                                            )}
+                                                            {status === 'no-approaching' && (
+                                                                <div className="text-gray-400 text-xs">No approaching buses</div>
+                                                            )}
+                                                            {status === 'arriving' && (
+                                                                <div className="flex items-center gap-2 text-green-600">
+                                                                    <span className="text-lg">🚌</span>
+                                                                    <span className="font-semibold">At station / Arriving now</span>
+                                                                </div>
+                                                            )}
+                                                            {status === 'active' && buses && buses.length > 0 && (
+                                                                <div className="space-y-2">
+                                                                    {buses.map((bus, idx) => (
+                                                                        <div key={idx} className="flex items-center justify-between bg-gray-50 rounded-lg p-2">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-base">🚌</span>
+                                                                                <div>
+                                                                                    <div className="text-[10px] text-gray-400 font-mono">
+                                                                                        <span className="font-bold text-gray-600">{bus.plate}</span>
+                                                                                        <span className="mx-1">•</span>
+                                                                                        <span>@ {bus.currentStop}</span>
+                                                                                    </div>
+                                                                                    <div className="text-xs text-gray-600">
+                                                                                        {bus.stopsAway} {bus.stopsAway === 1 ? 'stop' : 'stops'} • {bus.distanceM > 0 ? `${(bus.distanceM / 1000).toFixed(1)}km` : '< 0.1km'}
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className={`text-lg font-bold ${getEtaTextColor(bus.eta)}`}>
+                                                                                {bus.eta === 0 ? '<1' : bus.eta}
+                                                                                <span className="text-xs font-normal ml-0.5">min</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 );
                                             })}
