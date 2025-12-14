@@ -55,8 +55,8 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
         // Sort by distance
         processed.sort((a, b) => a.distance - b.distance);
 
-        // Take top 20
-        setNearbyStops(processed.slice(0, 20));
+        // Take top 50
+        setNearbyStops(processed.slice(0, 50));
         setLoading(false);
     } catch (e) {
         setError("Failed to process stop data.");
