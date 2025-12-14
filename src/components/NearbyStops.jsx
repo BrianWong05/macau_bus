@@ -38,7 +38,8 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
             // Parse routes from raw.ROUTE_NOS string "33,26A,..."
             let routes = [];
             if (stop.raw && stop.raw.ROUTE_NOS) {
-                routes = stop.raw.ROUTE_NOS.split(',').map(r => r.trim());
+                // Split, trim, and deduplicate
+                routes = [...new Set(stop.raw.ROUTE_NOS.split(',').map(r => r.trim()))];
             }
             return { ...stop, distance: dist, routes };
         });
@@ -117,8 +118,8 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                 <div className="text-center text-gray-500">No stops found nearby.</div>
             )}
 
-            {nearbyStops.map(stop => (
-                <div key={stop.code} className="border border-gray-100 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow bg-white">
+            {nearbyStops.map((stop, index) => (
+                <div key={stop.raw?.POLE_ID || `${stop.code}-${index}`} className="border border-gray-100 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow bg-white">
                     <div className="flex justify-between items-start mb-2">
                         <div>
                             <h3 className="font-bold text-gray-800 text-lg">{stop.name}</h3>
