@@ -5,6 +5,11 @@ import L from 'leaflet';
 import { fetchBusListApi, fetchMapLocationApi, fetchTrafficApi } from '../services/api';
 import govData from '../data/gov_data.json';
 
+// Import extracted utilities
+import { getDistanceFromLatLonInKm, formatDistance } from '../utils/distance';
+import { getStopCoords, getStopName } from '../utils/stopCodeMatcher';
+import { getEtaColor, getEtaTextColor } from '../utils/etaColors';
+
 // Fix for default marker icon
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
@@ -19,57 +24,9 @@ L.Marker.prototype.options.icon = DefaultIcon;
 
 const stopsData = govData.stops;
 
-// Helper component to auto-fit bounds
-const NearbyFitBounds = ({ center, stops, buses, expandedStop }) => {
-    const map = useMap();
-    const lastExpandedStop = useRef(null);
-    const hasCentered = useRef(false);
-
-    useEffect(() => {
-        if (!map) return;
-        const bounds = L.latLngBounds();
-        
-        // Logical Check: Should we zoom?
-        // 1. If expandedStop changed (User clicked a new stop)
-        // 2. If initial load (User hasn't moved yet)
-        
-        const isNewSelection = expandedStop !== lastExpandedStop.current;
-        
-        if (expandedStop) {
-            // Only zoom if this is a NEW selection. 
-            // If it's the SAME stop updating (auto-refresh), DO NOT zoom.
-             if (isNewSelection) {
-                 const stop = stops.find(s => s.code === expandedStop);
-                 if (stop) {
-                     bounds.extend([stop.lat, stop.lon]);
-                     // We can include buses here if we want initial fit to include them, 
-                     // but if we want to be stable, maybe just focusing on the stop is safer?
-                     // Or we include buses ONLY on first zoom.
-                     if (buses && buses.length > 0) {
-                         buses.forEach(b => {
-                             if (b.latitude && b.longitude) bounds.extend([b.latitude, b.longitude]);
-                         });
-                     }
-                     if (bounds.isValid()) {
-                         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
-                     }
-                     lastExpandedStop.current = expandedStop;
-                 }
-             }
-        } else if (center && stops.length > 0 && !hasCentered.current) {
-            // Initial center on user location
-            bounds.extend([center.lat, center.lon]);
-            stops.forEach(s => bounds.extend([s.lat, s.lon]));
-            
-            if (bounds.isValid()) {
-                map.fitBounds(bounds, { padding: [50, 50] });
-                hasCentered.current = true;
-            }
-        }
-        
-    }, [center, stops, map, expandedStop, buses]); // Dependencies kept, but logic gates execution
-    return null;
-};
+// NearbyFitBounds is now imported from features/nearby-stops/components
+import { NearbyFitBounds } from '../features/nearby-stops/components/NearbyFitBounds';
+import { useArrivalData } from '../features/nearby-stops/hooks/useArrivalData';
 
 const NearbyStops = ({ onClose, onSelectRoute }) => {
   const [nearbyStops, setNearbyStops] = useState([]);
@@ -77,12 +34,11 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
   const [error, setError] = useState(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [expandedStop, setExpandedStop] = useState(null);
-  const [arrivalData, setArrivalData] = useState({}); 
-  const [loadingArrivals, setLoadingArrivals] = useState({});
   const [userLocation, setUserLocation] = useState(null);
   const [viewMode, setViewMode] = useState('list'); 
-  const [stopBuses, setStopBuses] = useState([]); // Buses heading to expanded stop
-  const [lastUpdated, setLastUpdated] = useState(null); // Timestamp of last data fetch
+  
+  // Use extracted hook for arrival data management
+  const { arrivalData, loadingArrivals, stopBuses, lastUpdated, fetchStopData } = useArrivalData();
 
   // ... (useEffect for geolocation) ...
   useEffect(() => {
@@ -152,354 +108,39 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
     }
   };
 
-  // Haversine
-  const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
-    var R = 6371; 
-    var dLat = deg2rad(lat2-lat1);  
-    var dLon = deg2rad(lon2-lon1); 
-    var a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2); 
-    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-    var d = R * c; 
-    return d;
-  }
-
-  const deg2rad = (deg) => deg * (Math.PI/180);
-
-  const formatDistance = (km) => {
-      if (km < 1) return `${Math.round(km * 1000)}m`;
-      return `${km.toFixed(1)}km`;
-  }
-
-  // New Fetch Logic (Separated from Event Handler)
-  const fetchStopData = async (stopCode) => {
-      // Fix: Normalize lookup because raw data might use underscores/hyphens while state uses slashes
-      const stop = stopsData.find(s => {
-          const raw = s.code || s.raw?.P_ALIAS || s.raw?.ALIAS || "";
-          return raw.replace(/[_-]/g, '/') === stopCode;
-      });
-      
-      if (!stop) {
-          setLoadingArrivals(prev => ({...prev, [stopCode]: false}));
-          return;
-      }
-
-      // Don't clear previous data immediately to avoid flash, just set loading overlay if needed
-      // But we do want to show "updating..."? Maybe not necessary for auto-refresh.
-      // For initial load, we do want loading state.
-      // Let's rely on loadingArrivals for initial load only?
-      // Or we can check if data exists.
-      
-      try {
-           const newArrivals = {};
-           let allIncomingBuses = [];
-
-            // Fix warnings: Parse routes from raw string if they don't exist on the object
-            let stopRoutes = stop.routes;
-            if (!stopRoutes || stopRoutes.length === 0) {
-                 if (stop.raw && stop.raw.ROUTE_NOS) {
-                     stopRoutes = [...new Set(stop.raw.ROUTE_NOS.split(',').map(r => r.trim()))];
-                 } else {
-                     stopRoutes = [];
-                 }
-            }
-
-           await Promise.all(stopRoutes.map(async (route) => {
-               const checkDir = async (d) => {
-                   try {
-                     const [res2, res0] = await Promise.all([
-                        fetchBusListApi(route, d, '2'),
-                        fetchBusListApi(route, d, '0')
-                     ]);
-                     
-                     // Helper Logic (Duplicated for brevity, could be refactored)
-                     const isValid = (r) => r.data && r.data.data && r.data.data.routeInfo && r.data.data.routeInfo.length > 0;
-                     const countBuses = (stops) => stops.flatMap(s => s.busInfo || []).length;
-                     const findStopIndex = (stops) => {
-                         return stops.findIndex(s => {
-                             const sCode = (s.staCode || "").replace(/\//g, '-').replace(/_/g, '-');
-                             // Fix: Use stopCode argument instead of stop.code from closure
-                             const target = (stopCode || "").replace(/\//g, '-').replace(/_/g, '-');
-                             const targetBase = target.split('-')[0];
-                             if (sCode === target) return true;
-                             if (sCode === targetBase || sCode.split('-')[0] === targetBase) return true;
-                             return false;
-                         });
-                     };
-
-                     let candidates = [];
-                     if (isValid(res2)) candidates.push(res2.data.data.routeInfo);
-                     if (isValid(res0)) candidates.push(res0.data.data.routeInfo);
-
-                     let bestStops = null;
-                     let bestIdx = -1;
-                     for (const cStops of candidates) {
-                         const idx = findStopIndex(cStops);
-                         if (idx !== -1) {
-                             if (!bestStops || countBuses(cStops) > countBuses(bestStops)) {
-                                 bestStops = cStops;
-                                 bestIdx = idx;
-                             }
-                         }
-                     }
-
-                     if (bestStops && bestIdx !== -1) {
-                          // Found valid route direction!
-                          
-                          // Fetch traffic data for this route/direction
-                          let routeTrafficData = [];
-                          try {
-                              const trafficSegments = await fetchTrafficApi(route, d);
-                              routeTrafficData = trafficSegments || [];
-                          } catch (trafficErr) {
-                              console.log("Traffic fetch failed for NearbyStops, using default:", trafficErr);
-                          }
-                          
-                                                   // 1. Calculate Arrival Info (Rich Data)
-                          const stops = bestStops;
-                          const stopIdx = bestIdx;
-                          const totalStops = stops.length;
-                          let incomingBuses = []; // Array of { plate, stopsAway, eta, distanceM }
-                          let minStops = 999;
-                          let minTimeEst = 999;
-
-                          // Helper to find coords from local JSON data
-                          // API staCode examples: "M11-1", "T308/3", "M11"
-                          // Local JSON: raw.P_ALIAS = "M11_1", raw.ALIAS = "M11"
-                          const getCoords = (s) => {
-                              const staCode = (s.staCode || "").replace(/[-_]/g, '/').toUpperCase();
-                              const staBase = staCode.split('/')[0];
-                              
-                              // Try to find matching stop in local data
-                              let match = stopsData.find(local => {
-                                  // Normalize P_ALIAS: "M11_1" -> "M11/1"
-                                  const pAlias = (local.raw?.P_ALIAS || "").replace(/[-_]/g, '/').toUpperCase();
-                                  // Normalize ALIAS: "M11"
-                                  const alias = (local.raw?.ALIAS || "").toUpperCase();
-                                  
-                                  // Try exact match on P_ALIAS first
-                                  if (pAlias === staCode) return true;
-                                  // Try exact match on ALIAS
-                                  if (alias === staCode) return true;
-                                  // Try base match (e.g., M11 matches M11/1)
-                                  if (alias === staBase) return true;
-                                  if (pAlias.split('/')[0] === staBase) return true;
-                                  
-                                  return false;
-                              });
-                              
-                              return match ? { lat: match.lat, lon: match.lon } : null;
-                          };
-
-                          // Calculate distance between two stop indices
-                          const calcPathDistance = (fromIdx, toIdx) => {
-                              let pathDistKm = 0;
-                              for (let j = fromIdx; j < toIdx; j++) {
-                                  const p1 = getCoords(stops[j]);
-                                  const p2 = getCoords(stops[j+1]);
-                                  if (p1 && p2) {
-                                     pathDistKm += getDistanceFromLatLonInKm(p1.lat, p1.lon, p2.lat, p2.lon);
-                                  }
-                              }
-                              return pathDistKm;
-                          };
-                          
-                          // Calculate traffic-adjusted travel time segment by segment
-                          // Each segment gets its own traffic multiplier
-                          const calcTravelTime = (fromIdx, toIdx) => {
-                              let totalTime = 0;
-                              for (let j = fromIdx; j < toIdx; j++) {
-                                  const p1 = getCoords(stops[j]);
-                                  const p2 = getCoords(stops[j+1]);
-                                  if (p1 && p2) {
-                                      const segmentDistKm = getDistanceFromLatLonInKm(p1.lat, p1.lon, p2.lat, p2.lon);
-                                      
-                                      // Get traffic level for this segment
-                                      // Traffic: 1=smooth(1x), 2=moderate(1.5x), 3+=congested(2x)
-                                      let trafficMultiplier = 1.0;
-                                      if (routeTrafficData && routeTrafficData[j]) {
-                                          const traffic = routeTrafficData[j].traffic || 1;
-                                          if (traffic >= 3) trafficMultiplier = 2.0;      // 🔴 Congested
-                                          else if (traffic >= 2) trafficMultiplier = 1.5; // 🟡 Moderate
-                                          // else 🟢 Smooth = 1.0
-                                      }
-                                      
-                                      // Base: 1.5 min/km (~40 km/h), adjusted by traffic
-                                      totalTime += segmentDistKm * 1.5 * trafficMultiplier;
-                                  }
-                              }
-                              return totalTime;
-                          };
-
-                          // Collect ALL incoming buses with individual ETAs
-                          for (let i = 0; i <= stopIdx; i++) {
-                              if (stops[i].busInfo && stops[i].busInfo.length > 0) {
-                                  const stopsAway = stopIdx - i;
-                                  const pathDistKm = calcPathDistance(i, stopIdx);
-                                  
-                                  // Calculate traffic-adjusted ride time (per-segment)
-                                  const rideTime = calcTravelTime(i, stopIdx);
-                                  const dwellTime = stopsAway * 0.5;
-                                  let eta = Math.round(rideTime + dwellTime);
-                                  if (eta === 0 && stopsAway > 0 && pathDistKm > 0.1) eta = 1;
-                                  
-                                  // Helper to get stop name from local stopsData via staCode
-                                  const getStopName = (s) => {
-                                      const staCode = (s.staCode || "").replace(/[-_]/g, '/').toUpperCase();
-                                      const staBase = staCode.split('/')[0];
-                                      
-                                      const match = stopsData.find(local => {
-                                          const pAlias = (local.raw?.P_ALIAS || "").replace(/[-_]/g, '/').toUpperCase();
-                                          const alias = (local.raw?.ALIAS || "").toUpperCase();
-                                          if (pAlias === staCode) return true;
-                                          if (alias === staCode) return true;
-                                          if (alias === staBase) return true;
-                                          if (pAlias.split('/')[0] === staBase) return true;
-                                          return false;
-                                      });
-                                      
-                                      return match ? match.name : s.staCode;
-                                  };
-                                  
-                                  stops[i].busInfo.forEach(b => {
-                                      incomingBuses.push({
-                                          plate: b.busPlate,
-                                          stopsAway: stopsAway,
-                                          currentStop: getStopName(stops[i]),
-                                          eta: eta,
-                                          distanceM: Math.round(pathDistKm * 1000)
-                                      });
-                                  });
-
-                                  // Track minimum for summary
-                                  if (stopsAway < minStops) {
-                                      minStops = stopsAway;
-                                      minTimeEst = eta;
-                                  }
-                              }
-                          }
-
-                          // Sort buses by ETA (closest first), limit to 2
-                          incomingBuses.sort((a, b) => a.eta - b.eta);
-                          const topBuses = incomingBuses.slice(0, 2);
-                          const incomingPlates = incomingBuses.map(b => b.plate);
-
-                         const totalActiveBuses = incomingPlates.length; // Only count incoming? No, existing logic counted all. 
-                         // Logic was: const totalActiveBuses = stops.flatMap(s => s.busInfo || []).length;
-                         // Let's stick strictly to arrival text logic for text.
-                         const actualTotal = stops.flatMap(s => s.busInfo || []).length;
-
-                          // Get destination (last stop name)
-                          const destination = stops[stops.length - 1]?.staName || '';
-
-                          // Determine status
-                          let status = 'no-service';
-                          if (minStops === 0) status = 'arriving';
-                          else if (minStops < 999) status = 'active';
-                          else if (actualTotal > 0) status = 'no-approaching';
-
-                          // Build rich info object
-                          const info = {
-                              buses: topBuses,
-                              destination: destination,
-                              totalStops: totalStops,
-                              currentStopIdx: stopIdx,
-                              status: status,
-                              minStops: minStops,
-                              minEta: minTimeEst,
-                              direction: d  // Track which direction this stop was found in
-                          };
-
-                         // 2. Fetch GPS for Map (If there are incoming buses)
-                         // User wants only the 2 closest buses per route
-                         const targetPlates = incomingPlates.slice(-2);
-
-                         if (targetPlates.length > 0) {
-                             try {
-                                 const gpsData = await fetchMapLocationApi(route, d);
-                                 const busList = gpsData.busInfoList || (gpsData.data && gpsData.data.busInfoList) || [];
-                                 
-                                 // Filter GPS list by incoming plates
-                                 const matchedBuses = busList
-                                    .filter(b => targetPlates.includes(b.busPlate))
-                                    .map(b => ({
-                                        ...b,
-                                        route: route,
-                                        dir: d
-                                    }));
-                                 
-                                 if (matchedBuses.length > 0) {
-                                     allIncomingBuses.push(...matchedBuses);
-                                 }
-                             } catch (gpsErr) {
-                                 console.warn("GPS fetch failed for nearby", gpsErr);
-                             }
-                         }
-
-                         return info;
-                     }
-                   } catch (e) { console.warn(e); }
-                   return null;
-               };
-
-               const info0 = await checkDir('0');
-               if (info0) { newArrivals[route] = info0; return; }
-               const info1 = await checkDir('1');
-               if (info1) { newArrivals[route] = info1; } 
-               else { newArrivals[route] = "No Service / Wrong Sta"; }
-          }));
-
-           // Update state with new data
-           setArrivalData(prev => ({...prev, [stopCode]: newArrivals }));
-           setStopBuses(allIncomingBuses);
-           setLastUpdated(new Date());
-
-      } catch (err) {
-           console.error("Arrival fetch failed", err);
-      } finally {
-           setLoadingArrivals(prev => ({...prev, [stopCode]: false}));
-      }
-  };
+  // Note: getDistanceFromLatLonInKm and formatDistance are now imported from utils/distance
+  // Note: fetchStopData is now provided by useArrivalData hook
 
   // Auto-Refresh Effect
   useEffect(() => {
       let intervalId;
       if (expandedStop) {
           // Initial Fetch
-          // Only start loading spinner if we don't have data yet?
-          setLoadingArrivals(prev => ({...prev, [expandedStop]: true}));
           fetchStopData(expandedStop);
 
           // Interval Fetch (every 5 seconds)
           intervalId = setInterval(() => {
               fetchStopData(expandedStop);
           }, 5000);
-      } else {
-          setStopBuses([]);
       }
 
       return () => {
           if (intervalId) clearInterval(intervalId);
       };
-  }, [expandedStop]);
+  }, [expandedStop, fetchStopData]);
 
   const handleExpandStop = (stop) => {
       if (expandedStop === stop.code) {
           setExpandedStop(null);
       } else {
           setExpandedStop(stop.code);
-          // State clearing is now handled by effect or assumed fresh
-          // We can optionally clear old data here if we want fresh start visual
-          setArrivalData(prev => ({...prev, [stop.code]: {} })); 
-          setStopBuses([]);
+          // State is now managed by useArrivalData hook
       }
   };
 
   const handleManualRefresh = () => {
       if (expandedStop) {
-          setLoadingArrivals(prev => ({...prev, [expandedStop]: true}));
+          // Loading state managed by hook
           fetchStopData(expandedStop);
       } else if (userLocation) {
           setLoading(true);
@@ -638,18 +279,7 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                                                 // Rich ETA Card
                                                 const { buses, destination, totalStops, currentStopIdx, status, minStops, minEta } = info;
                                                 
-                                                // Color coding based on ETA
-                                                const getEtaColor = (eta) => {
-                                                    if (eta <= 3) return 'bg-green-500';
-                                                    if (eta <= 10) return 'bg-yellow-500';
-                                                    return 'bg-orange-500';
-                                                };
-                                                
-                                                const getEtaTextColor = (eta) => {
-                                                    if (eta <= 3) return 'text-green-600';
-                                                    if (eta <= 10) return 'text-yellow-600';
-                                                    return 'text-orange-600';
-                                                };
+                                                // Note: getEtaColor and getEtaTextColor are now imported from utils/etaColors
 
                                                 // Progress bar calculation
                                                 const progressPercent = totalStops > 0 && minStops < 999
