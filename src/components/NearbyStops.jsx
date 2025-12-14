@@ -80,17 +80,17 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl h-[80vh] flex flex-col overflow-hidden animate-fade-in-up">
+    <div className="flex flex-col h-full bg-white animate-fade-in-up">
         
         {/* Header */}
-        <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-            <h2 className="text-xl font-bold flex items-center gap-2">
+        <div className="p-4 border-b flex justify-between items-center bg-gray-50 sticky top-0 z-10">
+            <h2 className="text-xl font-bold flex items-center gap-2 text-gray-800">
                 📍 Nearby Stops
             </h2>
             <button 
                 onClick={onClose}
-                className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+                className="p-2 hover:bg-gray-200 rounded-full transition-colors text-gray-500"
+                title="Close"
             >
                 ✕
             </button>
@@ -121,16 +121,16 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                 <div key={stop.code} className="border border-gray-100 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow bg-white">
                     <div className="flex justify-between items-start mb-2">
                         <div>
-                            <h3 className="font-bold text-gray-800">{stop.name}</h3>
+                            <h3 className="font-bold text-gray-800 text-lg">{stop.name}</h3>
                             <div className="text-xs text-gray-400 font-mono">{stop.code}</div>
                         </div>
-                        <div className="bg-blue-50 text-blue-600 px-2 py-1 rounded-lg text-xs font-bold whitespace-nowrap">
-                            {formatDistance(stop.distance)}
+                        <div className="bg-blue-50 text-blue-600 px-2 py-1 rounded-lg text-xs font-bold whitespace-nowrap flex items-center gap-1">
+                            <span>📍</span> {formatDistance(stop.distance)}
                         </div>
                     </div>
                     
                     {/* Routes Chips */}
-                    <div className="flex flex-wrap gap-1.5 mt-2">
+                    <div className="flex flex-wrap gap-2 mt-2">
                         {stop.routes && stop.routes.map(route => (
                             <button
                                 key={route}
@@ -138,7 +138,7 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                                     onSelectRoute(route);
                                     onClose();
                                 }}
-                                className="px-2 py-0.5 bg-gray-100 hover:bg-blue-100 text-gray-600 hover:text-blue-700 text-xs rounded transition-colors"
+                                className="px-3 py-1 bg-gray-100 hover:bg-teal-50 text-gray-600 hover:text-teal-700 text-sm font-medium rounded-full transition-colors border border-transparent hover:border-teal-200"
                             >
                                 {route}
                             </button>
@@ -147,8 +147,6 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                 </div>
             ))}
         </div>
-
-      </div>
     </div>
   );
 };
