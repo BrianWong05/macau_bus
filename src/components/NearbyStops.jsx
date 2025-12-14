@@ -46,7 +46,9 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                 routes = [...new Set(stop.raw.ROUTE_NOS.split(',').map(r => r.trim()))];
             }
             // Fix: Map code from raw if missing
-            const code = stop.code || stop.raw?.P_ALIAS?.replace('_', '-') || stop.raw?.ALIAS || 'UNKNOWN';
+            // Fix: Map code from raw if missing, and enforce slash format (T311/2) as requested
+            let rawCode = stop.code || stop.raw?.P_ALIAS || stop.raw?.ALIAS || 'UNKNOWN';
+            const code = rawCode.replace(/[_-]/g, '/');
             return { ...stop, code, distance: dist, routes };
         });
 
@@ -116,34 +118,60 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                // Helper to check direction
                const checkDir = async (d) => {
                    try {
-                     // Try Type '2' first (common), then '0'
-                     // Actually App.jsx probes '0' and '2'. Let's just try '2' as it covers most.
-                     // Or better: Use the same probe logic as App.jsx roughly.
-                     let res = await fetchBusListApi(route, d, '2');
-                     if (!res.data || !res.data.data) {
-                         res = await fetchBusListApi(route, d, '0');
-                     }
+                     // Fetch both types in parallel to ensure we catch buses
+                     const [res2, res0] = await Promise.all([
+                        fetchBusListApi(route, d, '2'),
+                        fetchBusListApi(route, d, '0')
+                     ]);
 
-                     if (res.data && res.data.data && res.data.data.routeInfo) {
-                         const stops = res.data.data.routeInfo;
-                         
-                         // Match robustly: API returns "T311/2" or "M11-1" or "M11_1".
-                         const stopIdx = stops.findIndex(s => {
-                             // Normalize everything to hyphens
-                             // s.staCode might be "T311/2" -> "T311-2"
+                     let chosenStops = null;
+
+                     // Helper to valid stops
+                     const isValid = (r) => r.data && r.data.data && r.data.data.routeInfo && r.data.data.routeInfo.length > 0;
+                     // Helper to counts buses (Property is 'busInfo' not 'buses'!)
+                     const countBuses = (stops) => stops.flatMap(s => s.busInfo || []).length;
+
+                     // Determine matching stop index
+                     const findStopIndex = (stops) => {
+                         return stops.findIndex(s => {
                              const sCode = (s.staCode || "").replace(/\//g, '-').replace(/_/g, '-');
                              const target = (stop.code || "").replace(/\//g, '-').replace(/_/g, '-');
                              const targetBase = target.split('-')[0];
-                             
-                             // 1. Exact match (normalized)
                              if (sCode === target) return true;
-
-                             // 2. Base Match (Loose)
-                             // T311-2 vs T311
                              if (sCode === targetBase || sCode.split('-')[0] === targetBase) return true;
-                             
                              return false;
                          });
+                     };
+
+                     // Check candidates
+                     let candidates = [];
+                     if (isValid(res2)) candidates.push(res2.data.data.routeInfo);
+                     if (isValid(res0)) candidates.push(res0.data.data.routeInfo);
+
+                     // Find best candidate
+                     let bestStops = null;
+                     let bestIdx = -1;
+
+                     for (const cStops of candidates) {
+                         const idx = findStopIndex(cStops);
+                         if (idx !== -1) {
+                             // Found stop. Is it better?
+                             if (!bestStops) {
+                                 bestStops = cStops;
+                                 bestIdx = idx;
+                             } else {
+                                 // Already have a match. Prefer the one with MORE buses.
+                                 if (countBuses(cStops) > countBuses(bestStops)) {
+                                     bestStops = cStops;
+                                     bestIdx = idx;
+                                 }
+                             }
+                         }
+                     }
+
+                     if (bestStops && bestIdx !== -1) {
+                         const stops = bestStops;
+                         const stopIdx = bestIdx;
                          
                          if (stopIdx !== -1) {
                              // Found stop in this route direction!
@@ -151,7 +179,7 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                              
                              // Calculate Arrivals
                              // Find active buses before this stop
-                            const buses = stops.flatMap(s => s.buses || []);
+                            const buses = stops.flatMap(s => s.busInfo || []);
                             
                             // Parse bus stop indices
                             // Bus object: { busPlate: "MW-12-34", ... } -> It's attached to the stop object usually.
@@ -162,22 +190,28 @@ const NearbyStops = ({ onClose, onSelectRoute }) => {
                             let closestBus = null;
 
                              for (let i = 0; i <= stopIdx; i++) {
-                                 if (stops[i].buses && stops[i].buses.length > 0) {
+                                 if (stops[i].busInfo && stops[i].busInfo.length > 0) {
                                      const dist = stopIdx - i;
                                      if (dist < minStops) {
                                          minStops = dist;
-                                         closestBus = stops[i].buses[0];
+                                         closestBus = stops[i].busInfo[0];
                                      }
                                  }
                              }
 
-                             if (minStops === 999) {
-                                 info = "No bus en route";
-                             } else if (minStops === 0) {
-                                 info = "Arriving / At Station";
-                             } else {
-                                 info = `${minStops} stops away`;
-                             }
+                              const totalActiveBuses = stops.flatMap(s => s.busInfo || []).length;
+ 
+                              if (minStops === 999) {
+                                  if (totalActiveBuses > 0) {
+                                      info = "No approaching bus"; // Buses exist but passed or far away
+                                  } else {
+                                      info = "No active service"; // No buses on this line
+                                  }
+                              } else if (minStops === 0) {
+                                  info = "Arriving / At Station";
+                              } else {
+                                  info = `${minStops} stops away`;
+                              }
                              return true; // Stop searching directions for THIS route
                          }
                      }
