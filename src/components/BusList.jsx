@@ -58,10 +58,10 @@ const BusList = ({ stops, trafficData }) => {
                         </div>
 
                         {/* Col 2: Timeline (Line + Dot) */}
-                        <div className="relative flex flex-col items-center pt-8">
+                        <div className="relative z-0 flex flex-col items-center pt-8">
                             {/* Connecting Line (Only if not last stop) */}
                             {index < stops.length - 1 && (
-                                <div className={`absolute top-10 bottom-[-32px] w-1.5 z-0 transition-colors duration-500
+                                <div className={`absolute top-10 bottom-[-32px] w-1.5 z-[-1] transition-colors duration-500
                                     ${(!segmentTraffic || segmentTraffic <= 0) ? 'bg-gray-300' : ''}
                                     ${segmentTraffic == 1 ? 'bg-green-500' : ''}
                                     ${segmentTraffic == 2 ? 'bg-yellow-400' : ''}
