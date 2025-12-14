@@ -94,6 +94,15 @@ function App() {
     }
   };
 
+  const handleBack = () => {
+      setBusData(null);
+      setActiveRoute('');
+      setMapBuses([]);
+      setTrafficData([]);
+      setViewMode('list');
+      setHasOppositeDirection(true);
+  };
+
   const handleSearch = () => {
     executeSearch(routeNo, direction);
   };
@@ -347,7 +356,16 @@ function App() {
                     setViewMode('dashboard');
                 }}
              >
-                🚍 Macau Bus
+                {busData && (
+                    <button 
+                        onClick={handleBack}
+                        className="mr-1 hover:bg-white/20 rounded-full p-1 transition"
+                        title="Back"
+                    >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 19l-7-7 7-7"></path></svg>
+                    </button>
+                )}
+                {!busData && "🚍"} Macau Bus
              </h1>
              <button 
                 onClick={() => setShowNearby(true)}
