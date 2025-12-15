@@ -104,8 +104,18 @@ const RouteDashboard: React.FC<RouteDashboardProps> = ({ onSelectRoute, initialS
       });
     }
     results.sort((a, b) => a.distance - b.distance);
-    return results.slice(0, searchTerm.length > 0 ? 30 : 15);
-  }, [allStopsWithDistance, searchTerm, searchMode]);
+    let sliced = results.slice(0, searchTerm.length > 0 ? 30 : 15);
+    
+    // If there's an expanded stop that's not in the sliced list, add it at the beginning
+    if (expandedStop && !sliced.some(s => s.code === expandedStop)) {
+      const expandedStopData = allStopsWithDistance.find(s => s.code === expandedStop);
+      if (expandedStopData) {
+        sliced = [expandedStopData, ...sliced];
+      }
+    }
+    
+    return sliced;
+  }, [allStopsWithDistance, searchTerm, searchMode, expandedStop]);
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
