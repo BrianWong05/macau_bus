@@ -57,6 +57,8 @@
     "to": "To",
     "searching": "Searching...",
     "find_route": "Find Route",
+    "walk_to_stop": "Walk to bus stop",
+    "walk_to_destination": "Walk to destination",
     "results": "Route Found",
     "tap_search": "Tap \"Find Route\" to search",
     "loading_data": "Loading bus data..."

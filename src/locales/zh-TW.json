@@ -57,6 +57,8 @@
     "to": "往",
     "searching": "搜尋中...",
     "find_route": "搜尋路線",
+    "walk_to_stop": "步行至車站",
+    "walk_to_destination": "步行至目的地",
     "results": "找到路線",
     "tap_search": "點擊「搜尋路線」開始",
     "loading_data": "載入巴士資料中..."

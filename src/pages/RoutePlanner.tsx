@@ -540,12 +540,20 @@ export const RoutePlanner: React.FC = () => {
                 {results.length > 1 ? `(${results.length} ${t('route_planner.options', 'options')})` : ''}
               </span>
             </h2>
-            {results.map((result, index) => (
-              <div key={index} className="relative">
-                {/* Visual Connector between cards if needed, or just space */}
-                <RouteResultCard result={result} />
-              </div>
-            ))}
+            {results.map((result, index) => {
+              // Get walking segments if available
+              const trip = tripResults?.[index];
+              
+              return (
+                <div key={index} className="relative">
+                  <RouteResultCard 
+                    result={result} 
+                    startWalk={trip?.startWalk}
+                    endWalk={trip?.endWalk}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
 

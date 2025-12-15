@@ -56,7 +56,9 @@
     "swap": "Trocar",
     "to": "Para",
     "searching": "A pesquisar...",
-    "find_route": "Encontrar Rota",
+    "find_route": "Procurar",
+    "walk_to_stop": "Caminhar até à paragem",
+    "walk_to_destination": "Caminhar até ao destino",
     "results": "Rota Encontrada",
     "tap_search": "Toque em \"Encontrar Rota\"",
     "loading_data": "A carregar dados..."

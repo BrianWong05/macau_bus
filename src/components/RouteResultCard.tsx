@@ -190,9 +190,11 @@ const TransferIndicator: React.FC<TransferIndicatorProps> = ({ fromLeg, toLeg })
 interface RouteResultCardProps {
   result: RouteResult;
   className?: string;
+  startWalk?: { distanceMeters: number; durationMinutes: number };
+  endWalk?: { distanceMeters: number; durationMinutes: number };
 }
 
-export const RouteResultCard: React.FC<RouteResultCardProps> = ({ result, className = '' }) => {
+export const RouteResultCard: React.FC<RouteResultCardProps> = ({ result, className = '', startWalk, endWalk }) => {
   const { t } = useTranslation();
 
   if (!result || result.legs.length === 0) {
@@ -237,6 +239,26 @@ export const RouteResultCard: React.FC<RouteResultCardProps> = ({ result, classN
 
       {/* Timeline Body */}
       <div className="p-4">
+        {/* Walk to first bus stop */}
+        {startWalk && startWalk.durationMinutes > 0 && (
+          <div className="flex gap-3 mb-3">
+            <div className="relative z-10 flex-shrink-0">
+              <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center shadow-md">
+                <WalkIcon className="w-4 h-4 text-white" />
+              </div>
+              <div className="absolute left-1/2 top-8 bottom-0 w-0.5 -ml-px h-4 bg-blue-200" />
+            </div>
+            <div className="flex-1 pb-2">
+              <div className="text-sm font-medium text-blue-700">
+                {t('route_planner.walk_to_stop', 'Walk to bus stop')}
+              </div>
+              <div className="text-xs text-blue-600">
+                {startWalk.durationMinutes} {t('min', 'min')} • {startWalk.distanceMeters}m
+              </div>
+            </div>
+          </div>
+        )}
+
         {legs.map((leg, index) => (
           <React.Fragment key={`${leg.routeId}-${index}`}>
             {/* Transfer Indicator (between legs) */}
@@ -274,6 +296,26 @@ export const RouteResultCard: React.FC<RouteResultCardProps> = ({ result, classN
             </div>
           </div>
         </div>
+
+        {/* Walk from bus stop to final destination */}
+        {endWalk && endWalk.durationMinutes > 0 && (
+          <div className="flex gap-3 mt-3">
+            <div className="relative z-10 flex-shrink-0">
+              <div className="absolute left-1/2 bottom-8 top-0 w-0.5 -ml-px h-4 bg-green-200" />
+              <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center shadow-md mt-4">
+                <WalkIcon className="w-4 h-4 text-white" />
+              </div>
+            </div>
+            <div className="flex-1 pt-2">
+              <div className="text-sm font-medium text-green-700">
+                {t('route_planner.walk_to_destination', 'Walk to destination')}
+              </div>
+              <div className="text-xs text-green-600">
+                {endWalk.durationMinutes} {t('min', 'min')} • {endWalk.distanceMeters}m
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
