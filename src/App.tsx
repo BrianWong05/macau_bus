@@ -226,7 +226,7 @@ function App() {
 
             {/* 3. Active Bus Detail View */}
             {busData && (
-                <div className="flex-1 flex flex-col relative">
+                <div className="flex-1 flex flex-col relative overflow-hidden">
                     
                      {/* Controls Bar & Refresh */}
                      <RouteControls
