@@ -185,11 +185,12 @@ export class RouteFinder {
   /**
    * Find route from start to end stop
    * Optimized for fewest transfers
+   * Returns an array of possible routes (e.g. multiple direct bus lines)
    */
-  findRoute(startStopId: string, endStopId: string): RouteResult | null {
+  findRoute(startStopId: string, endStopId: string): RouteResult[] {
     if (!this.graph) {
       console.warn('RouteFinder: Graph not loaded');
-      return null;
+      return [];
     }
 
     const startStop = this.graph.stops[startStopId];
@@ -197,36 +198,38 @@ export class RouteFinder {
 
     if (!startStop || !endStop) {
       console.warn('RouteFinder: Invalid stop IDs');
-      return null;
+      return [];
     }
 
     // Same stop
     if (startStopId === endStopId) {
-      return { legs: [], totalStops: 0, transferCount: 0 };
+      return [];
     }
 
-    // ===== Step 1: Check for Direct Route =====
-    const directRoute = this.findDirectRoute(startStopId, endStopId);
-    if (directRoute) {
-      return directRoute;
+    // ===== Step 1: Check for Direct Routes (Return ALL options) =====
+    const directRoutes = this.findDirectRoutes(startStopId, endStopId);
+    if (directRoutes.length > 0) {
+      return directRoutes;
     }
 
-    // ===== Step 2: BFS for 1-Transfer Routes =====
-    const oneTransferRoute = this.findOneTransferRoute(startStopId, endStopId);
-    if (oneTransferRoute) {
-      return oneTransferRoute;
+    // ===== Step 2: BFS for 1-Transfer Routes (Return Top 5) =====
+    const oneTransferRoutes = this.findOneTransferRoutes(startStopId, endStopId);
+    if (oneTransferRoutes.length > 0) {
+      return oneTransferRoutes;
     }
 
     // ===== Step 3: General BFS (Multi-Transfer) =====
-    return this.findMultiTransferRoute(startStopId, endStopId);
+    const multi = this.findMultiTransferRoute(startStopId, endStopId);
+    return multi ? [multi] : [];
   }
 
   /**
-   * Find a direct route (no transfers)
+   * Find all direct routes (no transfers)
    */
-  private findDirectRoute(startStopId: string, endStopId: string): RouteResult | null {
+  private findDirectRoutes(startStopId: string, endStopId: string): RouteResult[] {
     const startStop = this.graph!.stops[startStopId];
     const endStop = this.graph!.stops[endStopId];
+    const results: RouteResult[] = [];
 
     // Find common routes
     const commonRoutes = startStop.routes.filter(r => endStop.routes.includes(r));
@@ -238,31 +241,30 @@ export class RouteFinder {
       const startIdx = route.stops.indexOf(startStopId);
       const endIdx = route.stops.indexOf(endStopId);
 
-      // Must go forward (start before end in the stop sequence)
+      // Must go forward
       if (startIdx !== -1 && endIdx !== -1 && startIdx < endIdx) {
         const legStops = route.stops.slice(startIdx, endIdx + 1);
         const leg = this.createLeg(routeId, legStops);
 
-        return {
+        results.push({
           legs: [leg],
           totalStops: legStops.length,
           transferCount: 0
-        };
+        });
       }
     }
 
-    return null;
+    // Sort by number of stops (ascending)
+    return results.sort((a, b) => a.totalStops - b.totalStops);
   }
 
   /**
-   * Find a route with exactly 1 transfer
+   * Find routes with exactly 1 transfer (Top 5)
    */
-  private findOneTransferRoute(startStopId: string, endStopId: string): RouteResult | null {
+  private findOneTransferRoutes(startStopId: string, endStopId: string): RouteResult[] {
     const startStop = this.graph!.stops[startStopId];
-    const endStop = this.graph!.stops[endStopId];
-
-    let bestResult: RouteResult | null = null;
-    let bestStopCount = Infinity;
+    const results: RouteResult[] = [];
+    const MAX_RESULTS = 5;
 
     // For each route from start stop
     for (const startRouteId of startStop.routes) {
@@ -292,25 +294,31 @@ export class RouteFinder {
             // Valid 1-transfer route found
             const leg1Stops = startRoute.stops.slice(startIdx, i + 1);
             const leg2Stops = endRoute.stops.slice(transferIdx, endIdx + 1);
-            const totalStops = leg1Stops.length + leg2Stops.length - 1; // -1 for transfer stop counted twice
+            const totalStops = leg1Stops.length + leg2Stops.length - 1;
 
-            if (totalStops < bestStopCount) {
-              bestStopCount = totalStops;
-              bestResult = {
-                legs: [
-                  this.createLeg(startRouteId, leg1Stops),
-                  this.createLeg(endRouteId, leg2Stops)
-                ],
-                totalStops,
-                transferCount: 1
-              };
-            }
+            results.push({
+              legs: [
+                this.createLeg(startRouteId, leg1Stops),
+                this.createLeg(endRouteId, leg2Stops)
+              ],
+              totalStops,
+              transferCount: 1
+            });
+            
+            // Optimization: If we have enough results, we could stop, 
+            // but we want the BEST ones. So we collect more and sort.
+            // Using a limit to prevent excessive processing
+            if (results.length > 50) break;
           }
         }
+        if (results.length > 50) break;
       }
     }
 
-    return bestResult;
+    // Sort by total stops and return top N
+    return results
+      .sort((a, b) => a.totalStops - b.totalStops)
+      .slice(0, MAX_RESULTS);
   }
 
   /**

@@ -60,7 +60,7 @@ export const RoutePlanner: React.FC = () => {
   const [startPointName, setStartPointName] = useState('');
   const [endPointName, setEndPointName] = useState('');
   
-  const [results, setResults] = useState<RouteResult | null>(null);
+  const [results, setResults] = useState<RouteResult[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locatingStart, setLocatingStart] = useState(false);
@@ -142,10 +142,10 @@ export const RoutePlanner: React.FC = () => {
       // Small delay for UX
       await new Promise(resolve => setTimeout(resolve, 300));
       
-      const result = routeFinder.findRoute(startPoint, endPoint);
+      const foundRoutes = routeFinder.findRoute(startPoint, endPoint);
       
-      if (result) {
-        setResults(result);
+      if (foundRoutes.length > 0) {
+        setResults(foundRoutes);
       } else {
         setError(t('route_planner.no_route', 'No route found between these stops'));
       }
@@ -317,8 +317,16 @@ export const RoutePlanner: React.FC = () => {
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-gray-700">
               {t('route_planner.results', 'Route Found')}
+              <span className="ml-2 text-sm font-normal text-gray-500">
+                {results.length > 1 ? `(${results.length} ${t('route_planner.options', 'options')})` : ''}
+              </span>
             </h2>
-            <RouteResultCard result={results} />
+            {results.map((result, index) => (
+              <div key={index} className="relative">
+                {/* Visual Connector between cards if needed, or just space */}
+                <RouteResultCard result={result} />
+              </div>
+            ))}
           </div>
         )}
 
