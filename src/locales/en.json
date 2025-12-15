@@ -33,5 +33,43 @@
   "search_route": "Search Route",
   "search_stop": "Search Stop",
   "search_stop_placeholder": "Enter stop name...",
-  "routes_at_stop": "Routes"
+  "routes_at_stop": "Routes",
+  "nav": {
+    "live_status": "Live Status",
+    "route_planner": "Route Planner"
+  },
+  "route_planner": {
+    "title": "Trip Planner",
+    "subtitle": "Find the best bus route",
+    "load_error": "Failed to load bus data",
+    "geo_not_supported": "Geolocation is not supported",
+    "no_nearby_stop": "No nearby stop found",
+    "geo_error": "Failed to get location",
+    "missing_points": "Please enter both start and end points",
+    "no_route": "No route found between these stops",
+    "search_error": "An error occurred while searching",
+    "from": "From",
+    "enter_stop_id": "Enter stop ID (e.g. M123)",
+    "use_location": "Use my location",
+    "swap": "Swap",
+    "to": "To",
+    "searching": "Searching...",
+    "find_route": "Find Route",
+    "results": "Route Found",
+    "tap_search": "Tap \"Find Route\" to search",
+    "loading_data": "Loading bus data..."
+  },
+  "route_result": {
+    "start": "Start",
+    "stops": "stops",
+    "board_at": "Board at",
+    "alight_at": "Alight at",
+    "hide_stops": "Hide stops",
+    "show_stops": "Show stops",
+    "stop_list_placeholder": "Stop list will be shown here...",
+    "transfer": "Transfer",
+    "no_route": "No route found",
+    "transfers": "transfer(s)",
+    "destination": "Destination"
+  }
 }

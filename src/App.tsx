@@ -4,6 +4,8 @@ import BusList from '@/components/BusList';
 import RouteDashboard from '@/components/RouteDashboard';
 import { useRouteData, AppHeader, RouteControls, RouteStatusBanner } from '@/features/route-tracker';
 import { fetchTrafficApi } from '@/services/api';
+import { BottomNavigation, NavigationTab } from '@/components/BottomNavigation';
+import { RoutePlanner } from '@/pages/RoutePlanner';
 
 function App() {
   const [routeNo, setRouteNo] = useState(''); // Input value
@@ -13,6 +15,7 @@ function App() {
   const [scrollToStop, setScrollToStop] = useState<string | null>(null);
   const [previousSearchMode, setPreviousSearchMode] = useState<'route' | 'stop'>('route');
   const [expandedStopCode, setExpandedStopCode] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<NavigationTab>('live');
 
   // Use extracted hook for route data management
   const {
@@ -191,81 +194,96 @@ function App() {
     <div className="fixed inset-0 bg-gray-100 font-sans overflow-hidden">
       <div className="max-w-md mx-auto bg-white h-full shadow-lg flex flex-col relative">
         
-        {/* Header */}
-        <AppHeader
-          activeRoute={activeRoute}
-          busData={busData}
-          routeNo={routeNo}
-          hasOppositeDirection={hasOppositeDirection}
-          onBack={handleBack}
-          onSearch={handleSearch}
-          onSetRouteNo={setRouteNo}
-          onToggleDirection={toggleDirection}
-          onResetToHome={() => {
-            setBusData(null);
-            setTrafficData([]);
-            setActiveRoute('');
-            setRouteNo('');
-            setViewMode('dashboard');
-          }}
-        />
+        {/* Live Status Tab */}
+        {activeTab === 'live' && (
+          <>
+            {/* Header */}
+            <AppHeader
+              activeRoute={activeRoute}
+              busData={busData}
+              routeNo={routeNo}
+              hasOppositeDirection={hasOppositeDirection}
+              onBack={handleBack}
+              onSearch={handleSearch}
+              onSetRouteNo={setRouteNo}
+              onToggleDirection={toggleDirection}
+              onResetToHome={() => {
+                setBusData(null);
+                setTrafficData([]);
+                setActiveRoute('');
+                setRouteNo('');
+                setViewMode('dashboard');
+              }}
+            />
 
-        {/* Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden relative">
-            
-            {/* 2. Route Dashboard (Route List) */}
-            {!busData && (
-                <RouteDashboard 
-                  onSelectRoute={handleSelectRoute} 
-                  initialSearchMode={previousSearchMode}
-                  onSearchModeChange={setPreviousSearchMode}
-                  expandedStop={expandedStopCode}
-                  onExpandedStopChange={setExpandedStopCode}
-                />
-            )}
+            {/* Content Area */}
+            <div className="flex-1 flex flex-col overflow-hidden relative pb-16">
+                
+                {/* 2. Route Dashboard (Route List) */}
+                {!busData && (
+                    <RouteDashboard 
+                      onSelectRoute={handleSelectRoute} 
+                      initialSearchMode={previousSearchMode}
+                      onSearchModeChange={setPreviousSearchMode}
+                      expandedStop={expandedStopCode}
+                      onExpandedStopChange={setExpandedStopCode}
+                    />
+                )}
 
-            {/* 3. Active Bus Detail View */}
-            {busData && (
-                <div className="flex-1 flex flex-col relative overflow-hidden">
-                    
-                     {/* Controls Bar & Refresh */}
-                     <RouteControls
-                       viewMode={viewMode as 'list' | 'map'}
-                       onViewModeChange={setViewMode}
-                       direction={direction}
-                       hasOppositeDirection={hasOppositeDirection}
-                       onToggleDirection={toggleDirection}
-                       lastUpdated={lastUpdated}
-                       onRefresh={() => {
-                           if (viewMode === 'map') fetchBusLocation(activeRoute, direction);
-                           else fetchRealtimeBus(activeRoute, direction, stopsRef.current);
-                       }}
-                       loading={loading}
-                     />
+                {/* 3. Active Bus Detail View */}
+                {busData && (
+                    <div className="flex-1 flex flex-col relative overflow-hidden">
+                        
+                         {/* Controls Bar & Refresh */}
+                         <RouteControls
+                           viewMode={viewMode as 'list' | 'map'}
+                           onViewModeChange={setViewMode}
+                           direction={direction}
+                           hasOppositeDirection={hasOppositeDirection}
+                           onToggleDirection={toggleDirection}
+                           lastUpdated={lastUpdated}
+                           onRefresh={() => {
+                               if (viewMode === 'map') fetchBusLocation(activeRoute, direction);
+                               else fetchRealtimeBus(activeRoute, direction, stopsRef.current);
+                           }}
+                           loading={loading}
+                         />
 
-                     <div className="flex-1 overflow-y-auto relative bg-white">
-                        {/* Active Buses Banner */}
-                        <RouteStatusBanner 
-                           activeBusCount={busData.buses.length}
-                           hasGPSWeakness={mapBuses.some(b => b.staCode)}
-                        />
+                         <div className="flex-1 overflow-y-auto relative bg-white">
+                            {/* Active Buses Banner */}
+                            <RouteStatusBanner 
+                               activeBusCount={busData.buses.length}
+                               hasGPSWeakness={mapBuses.some(b => b.staCode)}
+                            />
 
-                        {viewMode === 'list' ? (
-                            <BusList stops={busData.stops} trafficData={trafficData} />
-                        ) : (
-                             /* Map Component Container */
-                            <div className="h-[500px] w-full relative">
-                                <MapComponent 
-                                    stations={busData.stops} 
-                                    buses={mapBuses}
-                                    traffic={trafficData}
-                                />
-                             </div>
-                        )}
-                     </div>
-                </div>
-            )}
-        </div>
+                            {viewMode === 'list' ? (
+                                <BusList stops={busData.stops} trafficData={trafficData} />
+                            ) : (
+                                 /* Map Component Container */
+                                <div className="h-[500px] w-full relative">
+                                    <MapComponent 
+                                        stations={busData.stops} 
+                                        buses={mapBuses}
+                                        traffic={trafficData}
+                                    />
+                                 </div>
+                            )}
+                         </div>
+                    </div>
+                )}
+            </div>
+          </>
+        )}
+
+        {/* Route Planner Tab */}
+        {activeTab === 'planner' && (
+          <div className="flex-1 overflow-y-auto pb-16 relative">
+            <RoutePlanner />
+          </div>
+        )}
+
+        {/* Bottom Navigation */}
+        <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
     </div>
   );

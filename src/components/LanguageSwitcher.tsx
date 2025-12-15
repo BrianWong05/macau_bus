@@ -10,15 +10,15 @@ export const LanguageSwitcher = () => {
   const { i18n } = useTranslation();
 
   return (
-    <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+    <div className="flex gap-1 bg-white/20 backdrop-blur-md rounded-lg p-1 border border-white/10 shadow-sm">
       {languages.map(({ code, label }) => (
         <button
           key={code}
           onClick={() => i18n.changeLanguage(code)}
-          className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+          className={`px-2 py-1 text-xs font-bold rounded transition-all ${
             i18n.language === code
-              ? 'bg-teal-500 text-white'
-              : 'text-gray-600 hover:bg-gray-200'
+              ? 'bg-white text-teal-600 shadow-sm transform scale-105'
+              : 'text-white/90 hover:bg-white/10'
           }`}
         >
           {label}

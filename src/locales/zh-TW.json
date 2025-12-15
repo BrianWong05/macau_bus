@@ -33,5 +33,43 @@
   "search_route": "搜尋路線",
   "search_stop": "搜尋車站",
   "search_stop_placeholder": "輸入車站名稱...",
-  "routes_at_stop": "途經路線"
+  "routes_at_stop": "途經路線",
+  "nav": {
+    "live_status": "實時狀態",
+    "route_planner": "路線規劃"
+  },
+  "route_planner": {
+    "title": "路線規劃",
+    "subtitle": "尋找最佳巴士路線",
+    "load_error": "無法載入巴士資料",
+    "geo_not_supported": "不支援地理位置",
+    "no_nearby_stop": "附近找不到車站",
+    "geo_error": "無法獲取位置",
+    "missing_points": "請輸入起點和終點",
+    "no_route": "找不到往返這兩個車站的路線",
+    "search_error": "搜尋時發生錯誤",
+    "from": "從",
+    "enter_stop_id": "輸入車站編號 (如: M123)",
+    "use_location": "使用我的位置",
+    "swap": "交換",
+    "to": "往",
+    "searching": "搜尋中...",
+    "find_route": "搜尋路線",
+    "results": "找到路線",
+    "tap_search": "點擊「搜尋路線」開始",
+    "loading_data": "載入巴士資料中..."
+  },
+  "route_result": {
+    "start": "起點",
+    "stops": "站",
+    "board_at": "上車",
+    "alight_at": "下車",
+    "hide_stops": "隱藏車站",
+    "show_stops": "顯示車站",
+    "stop_list_placeholder": "車站列表將顯示於此...",
+    "transfer": "轉乘",
+    "no_route": "找不到路線",
+    "transfers": "次轉乘",
+    "destination": "終點"
+  }
 }

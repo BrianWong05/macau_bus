@@ -33,5 +33,43 @@
   "search_route": "Pesquisar Rota",
   "search_stop": "Pesquisar Paragem",
   "search_stop_placeholder": "Digite o nome da paragem...",
-  "routes_at_stop": "Rotas"
+  "routes_at_stop": "Rotas",
+  "nav": {
+    "live_status": "Estado ao Vivo",
+    "route_planner": "Planejador de Rotas"
+  },
+  "route_planner": {
+    "title": "Planejador de Viagem",
+    "subtitle": "Encontre a melhor rota",
+    "load_error": "Falha ao carregar dados",
+    "geo_not_supported": "Geolocalização não suportada",
+    "no_nearby_stop": "Nenhuma paragem próxima",
+    "geo_error": "Falha ao obter localização",
+    "missing_points": "Insira início e fim",
+    "no_route": "Nenhuma rota encontrada",
+    "search_error": "Erro na pesquisa",
+    "from": "De",
+    "enter_stop_id": "ID da paragem (ex: M123)",
+    "use_location": "Usar localização",
+    "swap": "Trocar",
+    "to": "Para",
+    "searching": "A pesquisar...",
+    "find_route": "Encontrar Rota",
+    "results": "Rota Encontrada",
+    "tap_search": "Toque em \"Encontrar Rota\"",
+    "loading_data": "A carregar dados..."
+  },
+  "route_result": {
+    "start": "Início",
+    "stops": "paragens",
+    "board_at": "Embarcar em",
+    "alight_at": "Desembarcar em",
+    "hide_stops": "Ocultar paragens",
+    "show_stops": "Mostrar paragens",
+    "stop_list_placeholder": "Lista de paragens aqui...",
+    "transfer": "Transferência",
+    "no_route": "Nenhuma rota encontrada",
+    "transfers": "transferência(s)",
+    "destination": "Destino"
+  }
 }
