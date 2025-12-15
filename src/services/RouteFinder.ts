@@ -48,6 +48,7 @@ export interface RouteLeg {
   stopCount: number;    // Number of stops on this leg
   stops: string[];      // All stop IDs in order for this leg
   duration: number;     // Estimated duration in minutes
+  fromStopIndex: number; // Index of fromStop in the full route (for map segment filtering)
 }
 
 export interface RouteResult {
@@ -322,7 +323,7 @@ export class RouteFinder {
       // Must go forward
       if (startIdx !== -1 && endIdx !== -1 && startIdx < endIdx) {
         const legStops = route.stops.slice(startIdx, endIdx + 1);
-        const leg = this.createLeg(routeId, legStops);
+        const leg = this.createLeg(routeId, legStops, startIdx); // Pass startIdx for map filtering
 
         // Calculate total duration: Leg time + Initial Wait (5m)
         const totalDuration = Math.ceil(leg.duration + 5);
@@ -531,41 +532,43 @@ export class RouteFinder {
   }
 
   /**
-   * Create a RouteLeg object from route ID and stop list
-   */
-  private createLeg(routeId: string, stops: string[]): RouteLeg {
-    const route = this.graph!.routes[routeId];
-    const [routeName, direction] = routeId.split('_');
+ * Create a RouteLeg object from route ID and stop list
+ * @param fromStopIndex - The index of the first stop in the full route (for map segment filtering)
+ */
+private createLeg(routeId: string, stops: string[], fromStopIndex: number = 0): RouteLeg {
+  const route = this.graph!.routes[routeId];
+  const [routeName, direction] = routeId.split('_');
 
-    const fromStop = this.graph!.stops[stops[0]];
-    const toStop = this.graph!.stops[stops[stops.length - 1]];
+  const fromStop = this.graph!.stops[stops[0]];
+  const toStop = this.graph!.stops[stops[stops.length - 1]];
 
-    // Calculate details
-    const distanceMeters = this.calculateRouteDistance(stops);
-    const distanceKm = distanceMeters / 1000;
-    const stopCount = stops.length;
-    
-    // Match etaCalculator.ts parameters:
-    // BASE_MIN_PER_KM = 1.5 (~40 km/h)
-    // DWELL_TIME_PER_STOP = 0.5 min
-    const BASE_MIN_PER_KM = 1.5;
-    const DWELL_TIME_PER_STOP = 0.5;
-    
-    const travelTimeMinutes = (distanceKm * BASE_MIN_PER_KM) + (stopCount * DWELL_TIME_PER_STOP);
+  // Calculate details
+  const distanceMeters = this.calculateRouteDistance(stops);
+  const distanceKm = distanceMeters / 1000;
+  const stopCount = stops.length;
+  
+  // Match etaCalculator.ts parameters:
+  // BASE_MIN_PER_KM = 1.5 (~40 km/h)
+  // DWELL_TIME_PER_STOP = 0.5 min
+  const BASE_MIN_PER_KM = 1.5;
+  const DWELL_TIME_PER_STOP = 0.5;
+  
+  const travelTimeMinutes = (distanceKm * BASE_MIN_PER_KM) + (stopCount * DWELL_TIME_PER_STOP);
 
-    return {
-      routeId,
-      routeName: route?.baseRoute || routeName,
-      direction: direction || '0',
-      fromStop: stops[0],
-      toStop: stops[stops.length - 1],
-      fromStopName: fromStop?.name || stops[0],
-      toStopName: toStop?.name || stops[stops.length - 1],
-      stopCount,
-      stops,
-      duration: travelTimeMinutes
-    };
-  }
+  return {
+    routeId,
+    routeName: route?.baseRoute || routeName,
+    direction: direction || '0',
+    fromStop: stops[0],
+    toStop: stops[stops.length - 1],
+    fromStopName: fromStop?.name || stops[0],
+    toStopName: toStop?.name || stops[stops.length - 1],
+    stopCount,
+    stops,
+    duration: travelTimeMinutes,
+    fromStopIndex
+  };
+}
 
   /**
    * Enrich route results with real-time traffic data

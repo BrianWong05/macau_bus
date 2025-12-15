@@ -192,9 +192,10 @@ interface RouteResultCardProps {
   className?: string;
   startWalk?: { distanceMeters: number; durationMinutes: number };
   endWalk?: { distanceMeters: number; durationMinutes: number };
+  onClick?: () => void;
 }
 
-export const RouteResultCard: React.FC<RouteResultCardProps> = ({ result, className = '', startWalk, endWalk }) => {
+export const RouteResultCard: React.FC<RouteResultCardProps> = ({ result, className = '', startWalk, endWalk, onClick }) => {
   const { t } = useTranslation();
 
   if (!result || result.legs.length === 0) {
@@ -208,9 +209,14 @@ export const RouteResultCard: React.FC<RouteResultCardProps> = ({ result, classN
   const { legs, totalStops, transferCount } = result;
 
   return (
-    <div className={`bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden ${className}`}>
-      {/* Header Summary */}
-      <div className="px-4 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white">
+    <div 
+      className={`bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden ${className}`}
+    >
+      {/* Header Summary - Clickable to open map */}
+      <div 
+        className={`px-4 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white ${onClick ? 'cursor-pointer hover:from-teal-600 hover:to-emerald-600 transition-colors' : ''}`}
+        onClick={onClick}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <BusIcon className="w-5 h-5" />
@@ -315,6 +321,22 @@ export const RouteResultCard: React.FC<RouteResultCardProps> = ({ result, classN
               </div>
             </div>
           </div>
+        )}
+
+        {/* View Map Button */}
+        {onClick && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onClick();
+            }}
+            className="mt-4 w-full py-2 px-4 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-lg font-medium text-sm hover:from-teal-600 hover:to-emerald-600 transition-colors flex items-center justify-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            </svg>
+            {t('route_result.view_map', 'View Map')}
+          </button>
         )}
       </div>
     </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RouteFinder, RouteResult, BusStop, TripResult } from '@/services/RouteFinder';
 import { RouteResultCard } from '@/components/RouteResultCard';
+import { RouteMapModal } from '@/components/RouteMapModal';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { searchPlace, PlaceResult } from '@/services/Geocoding';
 
@@ -75,6 +76,9 @@ export const RoutePlanner: React.FC = () => {
   
   // Place search results
   const [placeResults, setPlaceResults] = useState<PlaceResult[]>([]);
+  
+  // Map modal state
+  const [selectedRouteIndex, setSelectedRouteIndex] = useState<number | null>(null);
 
   // Initialize RouteFinder
   useEffect(() => {
@@ -550,6 +554,7 @@ export const RoutePlanner: React.FC = () => {
                     result={result} 
                     startWalk={trip?.startWalk}
                     endWalk={trip?.endWalk}
+                    onClick={() => setSelectedRouteIndex(index)}
                   />
                 </div>
               );
@@ -566,6 +571,19 @@ export const RoutePlanner: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Route Map Modal */}
+      {selectedRouteIndex !== null && results && results[selectedRouteIndex] && (
+        <RouteMapModal
+          isOpen={true}
+          onClose={() => setSelectedRouteIndex(null)}
+          legs={results[selectedRouteIndex].legs}
+          startWalk={tripResults?.[selectedRouteIndex]?.startWalk}
+          endWalk={tripResults?.[selectedRouteIndex]?.endWalk}
+          startCoords={startCoords || undefined}
+          endCoords={endCoords || undefined}
+        />
+      )}
     </div>
   );
 };
