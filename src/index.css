@@ -6,7 +6,6 @@ body {
   margin: 0;
   padding: 0;
   background-color: #f9fafb;
-  background-color: #f9fafb;
 }
 
 /* Fallback style for bus icons if custom styling fails to load or Leaflet strips styles */
@@ -17,4 +16,20 @@ body {
   align-items: center;
   justify-content: center;
   /* Ensure it has dimension */
+}
+
+/* Bus departing animation - more visible flashing effect */
+@keyframes bus-flash {
+  0%, 100% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scaleX(0.8);
+  }
+}
+
+.animate-bus-flash {
+  animation: bus-flash 0.6s ease-in-out infinite;
 }

@@ -146,7 +146,14 @@ export const StopCard: React.FC<StopCardProps> = ({
                                   <div className="text-[10px] text-gray-400 font-mono">
                                     <span className="font-bold text-gray-600">{bus.plate}</span>
                                     <span className="mx-1">•</span>
-                                    <span>{bus.isEnRoute ? t('en_route') : `@ ${bus.currentStop}`}</span>
+                                    <span>
+                                      {bus.isEnRoute 
+                                        ? t('en_route')
+                                        : bus.isDeparted && bus.nextStop 
+                                          ? `${t('going_to')} ${bus.nextStop}`
+                                          : `@ ${bus.currentStop}`
+                                      }
+                                    </span>
                                   </div>
                                   {bus.stopsAway > 0 && (
                                     <div className="text-xs text-gray-600">
@@ -154,7 +161,7 @@ export const StopCard: React.FC<StopCardProps> = ({
                                     </div>
                                   )}
                                   {bus.trafficSegments && bus.trafficSegments.length > 0 && (
-                                    <BusProgressBar trafficSegments={bus.trafficSegments} />
+                                    <BusProgressBar trafficSegments={bus.trafficSegments} isDeparted={bus.isDeparted} />
                                   )}
                                 </div>
                               </div>

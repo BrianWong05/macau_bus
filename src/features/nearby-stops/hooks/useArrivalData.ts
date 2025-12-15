@@ -38,6 +38,7 @@ interface IncomingBus {
   plate: string;
   stopsAway: number;
   currentStop: string;
+  nextStop: string | null; // Next stop name when bus has departed (status 0)
   eta: number;
   distanceM: number;
   trafficSegments: number[];
@@ -45,6 +46,7 @@ interface IncomingBus {
   targetStopIdx: number;
   busStatus: number | string;
   isEnRoute: boolean; // true = arriving (en route from previous stop), false = at station or approaching
+  isDeparted: boolean; // true = bus has departed from current stop (status 0)
 }
 
 // ============================================================================
@@ -247,10 +249,16 @@ export const useArrivalData = (): UseArrivalDataReturn => {
                   }
                   // For earlier stops (including en-route): include all
 
+                  const isDeparted = hasBusDeparted(bus.status);
+                  const nextStopName = isDeparted && stopIdx + 1 < stops.length 
+                    ? getStopName(stops[stopIdx + 1].staCode) 
+                    : null;
+
                   incomingBuses.push({
                     plate: bus.busPlate,
                     stopsAway: effectiveStopsAway,
-                    currentStop: isEnRoute ? 'En Route' : getStopName(stops[stopIdx].staCode),
+                    currentStop: getStopName(stops[stopIdx].staCode),
+                    nextStop: nextStopName,
                     eta: effectiveEta,
                     distanceM: isEnRoute ? 0 : Math.round(pathDistKm * 1000),
                     trafficSegments: segmentTraffic,
@@ -258,6 +266,7 @@ export const useArrivalData = (): UseArrivalDataReturn => {
                     targetStopIdx,
                     busStatus: bus.status,
                     isEnRoute, // true = arriving (en route), false = could be at station or approaching
+                    isDeparted, // true = bus has departed from current stop
                   });
                 });
               }

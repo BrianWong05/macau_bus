@@ -6,6 +6,7 @@ import React from 'react';
 
 interface BusProgressBarProps {
   trafficSegments: number[];
+  isDeparted?: boolean; // When true, flash the first segment to indicate bus is in transit
 }
 
 const getSegmentColor = (traffic: number): string => {
@@ -14,7 +15,7 @@ const getSegmentColor = (traffic: number): string => {
   return 'bg-green-500';
 };
 
-export const BusProgressBar: React.FC<BusProgressBarProps> = ({ trafficSegments }) => {
+export const BusProgressBar: React.FC<BusProgressBarProps> = ({ trafficSegments, isDeparted = false }) => {
   if (!trafficSegments || trafficSegments.length === 0) {
     return null;
   }
@@ -29,7 +30,9 @@ export const BusProgressBar: React.FC<BusProgressBarProps> = ({ trafficSegments 
         {trafficSegments.map((traffic, idx) => (
           <div 
             key={idx} 
-            className={`flex-1 ${getSegmentColor(traffic)} first:rounded-l last:rounded-r`}
+            className={`flex-1 ${getSegmentColor(traffic)} first:rounded-l last:rounded-r ${
+              idx === 0 && isDeparted ? 'animate-bus-flash' : ''
+            }`}
             title={`Segment ${idx + 1}: Traffic level ${traffic}`}
           />
         ))}
@@ -40,4 +43,3 @@ export const BusProgressBar: React.FC<BusProgressBarProps> = ({ trafficSegments 
     </div>
   );
 };
-

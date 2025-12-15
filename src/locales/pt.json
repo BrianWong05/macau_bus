@@ -19,6 +19,7 @@
   "buses_live": "autocarros em rota",
   "at_station": "Na paragem",
   "en_route": "A caminho",
+  "going_to": "indo para",
   "no_active_service": "Sem serviço activo",
   "no_approaching": "Sem autocarros a aproximar",
   "stops": "paragens",
