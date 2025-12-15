@@ -96,8 +96,6 @@ export const RoutePlanner: React.FC = () => {
 
   // Use Current Location
   const handleUseMyLocation = useCallback(() => {
-    if (!routeFinder) return;
-    
     if (!navigator.geolocation) {
       setError(t('route_planner.geo_not_supported', 'Geolocation is not supported'));
       return;
@@ -109,21 +107,11 @@ export const RoutePlanner: React.FC = () => {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
-        const nearestStopId = routeFinder.findNearestStop(latitude, longitude);
         
-        if (nearestStopId) {
-          const stop = routeFinder.getStop(nearestStopId);
-          if (stop) {
-            setStartInput(stop.name);
-            setSelectedStart(stop);
-          } else {
-            setStartInput(nearestStopId);
-            // If stop not found but ID exists (unlikely), treat as minimal stop
-             setSelectedStart({ id: nearestStopId, name: nearestStopId, routes: [] });
-          }
-        } else {
-          setError(t('route_planner.no_nearby_stop', 'No nearby stop found'));
-        }
+        // Store raw coordinates for coordinate-based routing (walking segment calculation)
+        setStartCoords({ lat: latitude, lng: longitude });
+        setStartInput(t('route_planner.my_location', 'My Location'));
+        setSelectedStart(null); // Not a bus stop
         setLocatingStart(false);
       },
       (err) => {
@@ -133,7 +121,7 @@ export const RoutePlanner: React.FC = () => {
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, [routeFinder, t]);
+  }, [t]);
 
   // Swap Start/End
   const handleSwap = () => {
