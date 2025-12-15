@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { RouteFinder, RouteResult } from '@/services/RouteFinder';
+import { RouteFinder, RouteResult, BusStop } from '@/services/RouteFinder';
 import { RouteResultCard } from '@/components/RouteResultCard';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
@@ -55,10 +55,12 @@ export const RoutePlanner: React.FC = () => {
   const [routeFinder, setRouteFinder] = useState<RouteFinder | null>(null);
   const [isRouteFinderLoading, setIsRouteFinderLoading] = useState(true);
   
-  const [startPoint, setStartPoint] = useState('');
-  const [endPoint, setEndPoint] = useState('');
-  const [startPointName, setStartPointName] = useState('');
-  const [endPointName, setEndPointName] = useState('');
+  const [startInput, setStartInput] = useState('');
+  const [endInput, setEndInput] = useState('');
+  
+  // Selected Objects (Logical)
+  const [selectedStart, setSelectedStart] = useState<BusStop | null>(null);
+  const [selectedEnd, setSelectedEnd] = useState<BusStop | null>(null);
   
   const [results, setResults] = useState<RouteResult[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -101,9 +103,15 @@ export const RoutePlanner: React.FC = () => {
         const nearestStopId = routeFinder.findNearestStop(latitude, longitude);
         
         if (nearestStopId) {
-          setStartPoint(nearestStopId);
           const stop = routeFinder.getStop(nearestStopId);
-          setStartPointName(stop?.name || nearestStopId);
+          if (stop) {
+            setStartInput(stop.name);
+            setSelectedStart(stop);
+          } else {
+            setStartInput(nearestStopId);
+            // If stop not found but ID exists (unlikely), treat as minimal stop
+             setSelectedStart({ id: nearestStopId, name: nearestStopId, routes: [] });
+          }
         } else {
           setError(t('route_planner.no_nearby_stop', 'No nearby stop found'));
         }
@@ -120,16 +128,16 @@ export const RoutePlanner: React.FC = () => {
 
   // Swap Start/End
   const handleSwap = () => {
-    setStartPoint(endPoint);
-    setEndPoint(startPoint);
-    setStartPointName(endPointName);
-    setEndPointName(startPointName);
+    setStartInput(endInput);
+    setEndInput(startInput);
+    setSelectedStart(selectedEnd);
+    setSelectedEnd(selectedStart);
     setResults(null);
   };
 
   // Find Route
   const handleFindRoute = useCallback(async () => {
-    if (!routeFinder || !startPoint || !endPoint) {
+    if (!routeFinder || !startInput || !endInput) {
       setError(t('route_planner.missing_points', 'Please enter both start and end points'));
       return;
     }
@@ -142,7 +150,11 @@ export const RoutePlanner: React.FC = () => {
       // Small delay for UX
       await new Promise(resolve => setTimeout(resolve, 300));
       
-      const foundRoutes = routeFinder.findRoute(startPoint, endPoint);
+      // Use ID if selected, otherwise try to use input as ID if user typed it manually
+      const sId = selectedStart?.id || startInput;
+      const eId = selectedEnd?.id || endInput;
+      
+      const foundRoutes = routeFinder.findRoute(sId, eId);
       
       if (foundRoutes.length > 0) {
         setResults(foundRoutes);
@@ -167,23 +179,71 @@ export const RoutePlanner: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [routeFinder, startPoint, endPoint, t]);
+  }, [routeFinder, startInput, endInput, selectedStart, selectedEnd, t]);
 
-  // Handle input change with stop lookup
+  const [suggestions, setSuggestions] = useState<BusStop[]>([]);
+  const [activeField, setActiveField] = useState<'start' | 'end' | null>(null);
+
+  // Search Logic
+  const updateSuggestions = useCallback((query: string) => {
+    if (!routeFinder || !query) {
+      setSuggestions([]);
+      return;
+    }
+    const found = routeFinder.searchStops(query);
+    setSuggestions(found);
+  }, [routeFinder]);
+
+  const selectStop = (stop: BusStop, field: 'start' | 'end') => {
+    if (field === 'start') {
+      setStartInput(stop.name);
+      setSelectedStart(stop);
+    } else {
+      setEndInput(stop.name);
+      setSelectedEnd(stop);
+    }
+    setSuggestions([]);
+    setActiveField(null);
+  };
+
+  // Handle input change with search
   const handleStartChange = (value: string) => {
-    setStartPoint(value);
+    setStartInput(value);
+    // If typing, clear selected object unless it matches exactly (optional, simpler to clear)
+    // Actually, we keep it as "unknown object" until selected
+    setSelectedStart(null);
+    
+    setActiveField('start');
+    updateSuggestions(value);
+    
+    // Auto-resolve if exact ID match (user typed "M123")
     if (routeFinder) {
-      const stop = routeFinder.getStop(value);
-      setStartPointName(stop?.name || '');
+       const stop = routeFinder.getStop(value.toUpperCase());
+       if (stop) {
+           setSelectedStart(stop);
+           // Optional: Auto-switch input to name? No, might be annoying if typing ID.
+       }
     }
   };
 
   const handleEndChange = (value: string) => {
-    setEndPoint(value);
+    setEndInput(value);
+    setSelectedEnd(null);
+    
+    setActiveField('end');
+    updateSuggestions(value);
+    
     if (routeFinder) {
-      const stop = routeFinder.getStop(value);
-      setEndPointName(stop?.name || '');
+       const stop = routeFinder.getStop(value.toUpperCase());
+       if (stop) {
+           setSelectedEnd(stop);
+       }
     }
+  };
+  
+  // Close suggestions on blur (delayed to allow click)
+  const handleBlur = () => {
+    setTimeout(() => setActiveField(null), 200);
   };
 
   return (
@@ -230,11 +290,27 @@ export const RoutePlanner: React.FC = () => {
                   <MapPinIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500" />
                   <input
                     type="text"
-                    value={startPoint}
+                    value={startInput}
                     onChange={(e) => handleStartChange(e.target.value)}
-                    placeholder={t('route_planner.enter_stop_id', 'Enter stop ID (e.g. M123)')}
+                    onFocus={() => setActiveField('start')}
+                    onBlur={handleBlur}
+                    placeholder={t('route_planner.search_placeholder', 'Search stop name or ID')}
                     className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
                   />
+                  {suggestions.length > 0 && activeField === 'start' && (
+                    <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-1 max-h-60 overflow-y-auto">
+                      {suggestions.map(stop => (
+                        <button
+                          key={stop.id}
+                          className="w-full text-left px-4 py-2 hover:bg-teal-50 border-b border-gray-50 last:border-0"
+                          onClick={() => selectStop(stop, 'start')}
+                        >
+                          <div className="font-bold text-gray-800">{stop.name}</div>
+                          <div className="text-xs text-teal-600 font-mono">{stop.id}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={handleUseMyLocation}
@@ -249,8 +325,11 @@ export const RoutePlanner: React.FC = () => {
                   )}
                 </button>
               </div>
-              {startPointName && (
-                <p className="text-xs text-gray-500 mt-1 pl-10">{startPointName}</p>
+              {/* Optional: Show ID if selected */}
+              {selectedStart && startInput !== selectedStart.id && (
+                  <p className="text-xs text-teal-600 mt-1 pl-10">
+                      ID: {selectedStart.id}
+                  </p>
               )}
             </div>
 
@@ -274,21 +353,39 @@ export const RoutePlanner: React.FC = () => {
                 <MapPinIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-red-500" />
                 <input
                   type="text"
-                  value={endPoint}
+                  value={endInput}
                   onChange={(e) => handleEndChange(e.target.value)}
-                  placeholder={t('route_planner.enter_stop_id', 'Enter stop ID (e.g. M456)')}
+                  onFocus={() => setActiveField('end')}
+                  onBlur={handleBlur}
+                  placeholder={t('route_planner.search_placeholder', 'Search stop name or ID')}
                   className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
                 />
+                {suggestions.length > 0 && activeField === 'end' && (
+                    <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-1 max-h-60 overflow-y-auto">
+                      {suggestions.map(stop => (
+                        <button
+                          key={stop.id}
+                          className="w-full text-left px-4 py-2 hover:bg-teal-50 border-b border-gray-50 last:border-0"
+                          onClick={() => selectStop(stop, 'end')}
+                        >
+                          <div className="font-bold text-gray-800">{stop.name}</div>
+                          <div className="text-xs text-teal-600 font-mono">{stop.id}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
               </div>
-              {endPointName && (
-                <p className="text-xs text-gray-500 mt-1 pl-10">{endPointName}</p>
+              {selectedEnd && endInput !== selectedEnd.id && (
+                  <p className="text-xs text-teal-600 mt-1 pl-10">
+                      ID: {selectedEnd.id}
+                  </p>
               )}
             </div>
 
             {/* Search Button */}
             <button
               onClick={handleFindRoute}
-              disabled={loading || !startPoint || !endPoint}
+              disabled={loading || !startInput || !endInput}
               className="w-full mt-6 py-3.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
@@ -342,7 +439,7 @@ export const RoutePlanner: React.FC = () => {
           </div>
         )}
 
-        {!loading && !results && !error && startPoint && endPoint && (
+        {!loading && !results && !error && startInput && endInput && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
             <SearchIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-400">

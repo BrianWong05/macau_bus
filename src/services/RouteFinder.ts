@@ -7,6 +7,7 @@
 import { fetchTrafficApi } from '@/services/api';
 import { calcTravelTime } from '@/utils/etaCalculator';
 import type { Stop as EtaStop, TrafficSegment } from '@/utils/etaCalculator';
+import govData from '@/data/gov_data.json';
 
 /**
  * RouteFinder - Client-side Pathfinding for the Macau Bus Network
@@ -20,6 +21,8 @@ export interface BusStop {
   lat?: number;
   lng?: number;
   routes: string[];
+  nameEn?: string; // English Name
+  namePt?: string; // Portuguese Name
 }
 
 export interface BusRoute {
@@ -83,6 +86,41 @@ export class RouteFinder {
         }
         const data = await response.json();
         this.graph = data as BusGraph;
+
+        // Enrich with multilingual data from gov_data
+        if (this.graph && this.graph.stops) {
+            const govStops = (govData as any).stops || [];
+            
+            // Create a lookup map for speed
+            // Map keys: ALIAS and P_ALIAS to the stop object
+            const govMap = new Map<string, any>();
+            govStops.forEach((gs: any) => {
+                if (gs.raw?.ALIAS) govMap.set(gs.raw.ALIAS.toUpperCase(), gs);
+                if (gs.raw?.P_ALIAS) govMap.set(gs.raw.P_ALIAS.toUpperCase(), gs);
+            });
+
+            // Iterate graph stops and merge
+            Object.values(this.graph.stops).forEach(stop => {
+                // Try to find match by ID (which corresponds to ALIAS/P_ALIAS usually)
+                // Stop IDs in bus_data are like "M1/5", "M225".
+                // gov_data ALIAS matches this usually.
+                
+                // Normalization: "M1-5" vs "M1/5"? gov_data has "M11_1" for "P_ALIAS" but "M11" for "ALIAS".
+                // Lets try exact match first, then replace / with _
+                
+                let match = govMap.get(stop.id.toUpperCase());
+                if (!match) {
+                     const altId = stop.id.replace('/', '_').toUpperCase();
+                     match = govMap.get(altId);
+                }
+                
+                if (match && match.raw) {
+                    stop.nameEn = match.raw.P_NAME_EN || match.raw.NAME_EN || '';
+                    stop.namePt = match.raw.P_NAME_POR || match.raw.NAME_POR || '';
+                }
+            });
+        }
+
         this.isLoaded = true;
       } catch (error) {
         console.error('RouteFinder: Failed to load data', error);
@@ -648,6 +686,30 @@ export class RouteFinder {
     if (!stopAData || !stopBData) return false;
 
     return stopAData.routes.some(r => stopBData.routes.includes(r));
+  }
+
+  /**
+   * Search stops by ID or Name (partial match)
+   */
+  searchStops(query: string): BusStop[] {
+    if (!this.graph || !query) return [];
+    
+    const lowerQuery = query.toLowerCase();
+    const results: BusStop[] = [];
+    
+    for (const stop of Object.values(this.graph.stops)) {
+      if (
+        stop.id.toLowerCase().includes(lowerQuery) || 
+        stop.name.toLowerCase().includes(lowerQuery) ||
+        (stop.nameEn && stop.nameEn.toLowerCase().includes(lowerQuery)) ||
+        (stop.namePt && stop.namePt.toLowerCase().includes(lowerQuery))
+      ) {
+        results.push(stop);
+        if (results.length >= 10) break;
+      }
+    }
+    
+    return results;
   }
 }
 
