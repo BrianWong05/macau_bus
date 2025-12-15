@@ -188,7 +188,7 @@ function App() {
   }, [mapBuses, viewMode]);
 
   return (
-    <div className="h-screen bg-gray-100 font-sans overflow-hidden">
+    <div className="fixed inset-0 bg-gray-100 font-sans overflow-hidden">
       <div className="max-w-md mx-auto bg-white h-full shadow-lg flex flex-col relative">
         
         {/* Header */}
@@ -211,7 +211,7 @@ function App() {
         />
 
         {/* Content Area */}
-        <div className="flex-1 flex flex-col overflow-y-auto relative">
+        <div className="flex-1 flex flex-col overflow-hidden relative">
             
             {/* 2. Route Dashboard (Route List) */}
             {!busData && (
