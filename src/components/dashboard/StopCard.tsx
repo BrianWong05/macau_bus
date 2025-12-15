@@ -46,10 +46,10 @@ export const StopCard: React.FC<StopCardProps> = ({
   const stopArrivals = arrivalData[stop.code] || {};
 
   return (
-    <div className={`border rounded-xl shadow-sm transition-all bg-white overflow-hidden ${isExpanded ? 'ring-2 ring-teal-500 shadow-md' : 'hover:shadow-md border-gray-100'}`}>
-      {/* Stop Header - Clickable */}
+    <div className={`border rounded-xl shadow-sm transition-all bg-white overflow-clip ${isExpanded ? 'ring-2 ring-teal-500 shadow-md' : 'hover:shadow-md border-gray-100'}`}>
+      {/* Stop Header - Clickable and Sticky */}
       <div 
-        className="p-4 flex justify-between items-start cursor-pointer"
+        className="sticky top-0 z-50 bg-white p-4 flex justify-between items-start cursor-pointer border-b border-gray-50 rounded-t-xl"
         onClick={onToggle}
       >
         <div>

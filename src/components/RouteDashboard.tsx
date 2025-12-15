@@ -142,23 +142,25 @@ const RouteDashboard: React.FC<RouteDashboardProps> = ({ onSelectRoute, initialS
       </div>
 
       {/* Results */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {searchMode === 'route' ? (
-          <RouteGrid 
-            routes={filteredRoutes} 
-            onSelectRoute={onSelectRoute} 
-          />
-        ) : (
-          <StopList 
-            stops={displayStops}
-            userLocation={userLocation}
-            locationLoading={locationLoading}
-            locationError={locationError}
-            onSelectRoute={onSelectRoute}
-            expandedStop={expandedStop}
-            onExpandedStopChange={onExpandedStopChange}
-          />
-        )}
+      <div className="flex-1 overflow-y-auto bg-gray-50">
+        <div className="p-4">
+          {searchMode === 'route' ? (
+            <RouteGrid 
+              routes={filteredRoutes} 
+              onSelectRoute={onSelectRoute} 
+            />
+          ) : (
+            <StopList 
+              stops={displayStops}
+              userLocation={userLocation}
+              locationLoading={locationLoading}
+              locationError={locationError}
+              onSelectRoute={onSelectRoute}
+              expandedStop={expandedStop}
+              onExpandedStopChange={onExpandedStopChange}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
