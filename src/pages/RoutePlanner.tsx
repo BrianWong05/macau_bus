@@ -125,6 +125,8 @@ export const RoutePlanner: React.FC = () => {
     setEndInput(startInput);
     setSelectedStart(selectedEnd);
     setSelectedEnd(selectedStart);
+    setStartCoords(endCoords);
+    setEndCoords(startCoords);
     setResults(null);
   };
 
