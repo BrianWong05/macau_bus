@@ -37,9 +37,10 @@ export interface LegCardProps {
   isFirst: boolean;
   isLast: boolean;
   legIndex: number;
+  onBadgeClick?: () => void;
 }
 
-export const LegCard: React.FC<LegCardProps> = ({ leg, isFirst, isLast, legIndex }) => {
+export const LegCard: React.FC<LegCardProps> = ({ leg, isFirst, isLast, legIndex, onBadgeClick }) => {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
@@ -77,7 +78,15 @@ export const LegCard: React.FC<LegCardProps> = ({ leg, isFirst, isLast, legIndex
                 {t('route_result.start', 'Start')}
               </span>
             )}
-            <span className={`px-2 py-0.5 rounded-md text-sm font-bold ${badgeColor} flex items-center gap-1`}>
+            <span 
+              className={`px-2 py-0.5 rounded-md text-sm font-bold ${badgeColor} flex items-center gap-1 ${onBadgeClick ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''}`}
+              onClick={(e) => {
+                if (onBadgeClick) {
+                  e.stopPropagation();
+                  onBadgeClick();
+                }
+              }}
+            >
               <BusIcon className="w-3 h-3" />
               {leg.routeName}
             </span>

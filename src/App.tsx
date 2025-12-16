@@ -278,7 +278,12 @@ function App() {
         {/* Route Planner Tab */}
         {activeTab === 'planner' && (
           <div className="flex-1 overflow-y-auto pb-16 relative">
-            <RoutePlanner />
+            <RoutePlanner 
+              onViewRouteStatus={(route, stopCode) => {
+                setActiveTab('live');
+                handleSelectRoute(route, stopCode);
+              }}
+            />
           </div>
         )}
 

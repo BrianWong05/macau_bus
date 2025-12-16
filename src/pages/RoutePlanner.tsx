@@ -39,7 +39,13 @@ const LoaderIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" })
 
 // ============== Main Component ==============
 
-export const RoutePlanner: React.FC = () => {
+// ============== Main Component ==============
+
+interface RoutePlannerProps {
+  onViewRouteStatus?: (route: string, stopCode?: string) => void;
+}
+
+export const RoutePlanner: React.FC<RoutePlannerProps> = ({ onViewRouteStatus }) => {
   const { t } = useTranslation();
   
   // State
@@ -423,7 +429,17 @@ export const RoutePlanner: React.FC = () => {
           loading={loading}
           showMap={showMapWithResults}
           onToggleMap={() => setShowMapWithResults(!showMapWithResults)}
-          onSelectRoute={setSelectedRouteIndex}
+          onSelectRoute={(index) => {
+            // Smart navigation: If single leg, go to route page. Else open map.
+            const result = results?.[index];
+            if (result && result.legs.length === 1 && onViewRouteStatus) {
+              onViewRouteStatus(result.legs[0].routeName, result.legs[0].fromStop);
+            } else {
+              setSelectedRouteIndex(index);
+            }
+          }}
+          onViewMap={setSelectedRouteIndex}
+          onRouteClick={onViewRouteStatus}
         />
 
         {!loading && !results && !error && startInput && endInput && (

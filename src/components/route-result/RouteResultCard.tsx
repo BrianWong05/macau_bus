@@ -12,10 +12,20 @@ interface RouteResultCardProps {
   className?: string;
   startWalk?: { distanceMeters: number; durationMinutes: number };
   endWalk?: { distanceMeters: number; durationMinutes: number };
-  onClick?: () => void;
+  onHeaderClick?: () => void;
+  onViewMap?: () => void;
+  onRouteClick?: (route: string, stopCode: string) => void;
 }
 
-export const RouteResultCard: React.FC<RouteResultCardProps> = ({ result, className = '', startWalk, endWalk, onClick }) => {
+export const RouteResultCard: React.FC<RouteResultCardProps> = ({ 
+  result, 
+  className = '', 
+  startWalk, 
+  endWalk, 
+  onHeaderClick,
+  onViewMap,
+  onRouteClick
+}) => {
   const { t } = useTranslation();
 
   if (!result || result.legs.length === 0) {
@@ -34,8 +44,8 @@ export const RouteResultCard: React.FC<RouteResultCardProps> = ({ result, classN
     >
       {/* Header Summary - Clickable to open map */}
       <div 
-        className={`px-4 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white ${onClick ? 'cursor-pointer hover:from-teal-600 hover:to-emerald-600 transition-colors' : ''}`}
-        onClick={onClick}
+        className={`px-4 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white ${onHeaderClick ? 'cursor-pointer hover:from-teal-600 hover:to-emerald-600 transition-colors' : ''}`}
+        onClick={onHeaderClick}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -98,6 +108,7 @@ export const RouteResultCard: React.FC<RouteResultCardProps> = ({ result, classN
               isFirst={index === 0}
               isLast={index === legs.length - 1}
               legIndex={index}
+              onBadgeClick={() => onRouteClick?.(leg.routeName, leg.fromStop)}
             />
           </React.Fragment>
         ))}
@@ -144,11 +155,11 @@ export const RouteResultCard: React.FC<RouteResultCardProps> = ({ result, classN
         )}
 
         {/* View Map Button */}
-        {onClick && (
+        {onViewMap && (
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onClick();
+              onViewMap();
             }}
             className="mt-4 w-full py-2 px-4 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-lg font-medium text-sm hover:from-teal-600 hover:to-emerald-600 transition-colors flex items-center justify-center gap-2"
           >

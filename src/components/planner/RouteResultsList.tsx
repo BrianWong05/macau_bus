@@ -10,6 +10,8 @@ interface RouteResultsListProps {
   showMap: boolean;
   onToggleMap: () => void;
   onSelectRoute: (index: number) => void;
+  onViewMap: (index: number) => void;
+  onRouteClick?: (route: string, stopCode: string) => void;
 }
 
 export const RouteResultsList: React.FC<RouteResultsListProps> = ({
@@ -18,7 +20,9 @@ export const RouteResultsList: React.FC<RouteResultsListProps> = ({
   loading,
   showMap,
   onToggleMap,
-  onSelectRoute
+  onSelectRoute,
+  onViewMap,
+  onRouteClick
 }) => {
   const { t } = useTranslation();
 
@@ -67,7 +71,9 @@ export const RouteResultsList: React.FC<RouteResultsListProps> = ({
               result={result} 
               startWalk={trip?.startWalk}
               endWalk={trip?.endWalk}
-              onClick={() => onSelectRoute(index)}
+              onHeaderClick={() => onSelectRoute(index)}
+              onViewMap={() => onViewMap(index)}
+              onRouteClick={onRouteClick}
             />
           </div>
         );
