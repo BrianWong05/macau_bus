@@ -53,20 +53,26 @@ function App() {
       if (scrollToStop && busData && busData.stops) {
           // Small delay to ensure DOM is rendered
           setTimeout(() => {
-              // Normalize the stop code for ID matching
-              const normalizedCode = scrollToStop.replace(/[/_]/g, '-');
-              const baseCode = scrollToStop.split(/[/_-]/)[0];
+              // Normalize the stop code for ID matching (Sanitize slashes to dashes)
+              const sanitizedCode = scrollToStop.replace(/[\/\s]/g, '-');
+              const baseCode = sanitizedCode.split('-')[0];
               
-              // Try multiple ID formats
-              let el = document.getElementById(`stop-${scrollToStop}`);
-              if (!el) el = document.getElementById(`stop-${normalizedCode}`);
+              console.log(`[App] Scrolling to stop: ${scrollToStop} -> ID: stop-${sanitizedCode}`);
+              
+              // 1. Try Exact Safe Match
+              let el = document.getElementById(`stop-${sanitizedCode}`);
+              
+              // 2. Try Original (in case logic differs)
+              if (!el) el = document.getElementById(`stop-${scrollToStop}`);
+              
+              // 3. Fallback: Find by base code (e.g. T309 matches T309-1)
               if (!el) {
-                  // Try to find by base code (e.g., T309 matches T309-1)
                   const allStops = document.querySelectorAll('[id^="stop-"]');
                   for (let i = 0; i < allStops.length; i++) {
                       const stopEl = allStops[i] as HTMLElement;
-                      const stopBase = stopEl.id.replace('stop-', '').split(/[/_-]/)[0];
-                      if (stopBase === baseCode) {
+                      const currentId = stopEl.id.replace('stop-', '');
+                      // Check if starts with baseCode + dash or is exactly baseCode
+                      if (currentId === baseCode || currentId.startsWith(`${baseCode}-`)) {
                           el = stopEl;
                           break;
                       }
@@ -77,9 +83,11 @@ function App() {
                   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   el.classList.add('ring-2', 'ring-teal-400');
                   setTimeout(() => el.classList.remove('ring-2', 'ring-teal-400'), 2000);
+              } else {
+                  console.warn(`[App] Stop element not found: ${scrollToStop}`);
               }
               setScrollToStop(null);
-          }, 500);
+          }, 800); // Increased timeout to 800ms to ensure rendering
       }
   }, [scrollToStop, busData]);
 

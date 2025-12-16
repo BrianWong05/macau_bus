@@ -81,7 +81,7 @@ const RouteTimelineItem: React.FC<RouteTimelineItemProps> = ({ stop, index, isLa
   };
 
   return (
-    <div id={`stop-${stop.staCode}`} className="relative flex group">
+    <div className="relative flex group">
       {/* 1. Timeline Column */}
       <div className="flex flex-col items-center w-16 flex-shrink-0 relative">
         {/* Continuous Line */}
@@ -109,7 +109,10 @@ const RouteTimelineItem: React.FC<RouteTimelineItemProps> = ({ stop, index, isLa
 
       {/* 2. Content Column */}
       <div className="flex-1 pb-8 pt-0 min-h-[80px] flex flex-col justify-start relative top-[-4px]">
-        <div className="flex items-baseline justify-between">
+        <div 
+          id={`stop-${stop.staCode.replace(/[\/\s]/g, '-')}`}
+          className="flex items-baseline justify-between p-2 rounded-lg -ml-2 transition-all duration-300"
+        >
            <div>
              <h3 className="text-base font-bold text-gray-800 leading-tight group-hover:text-teal-700 transition-colors">
                {index + 1}. {getLocalizedStopName(stop.staCode, stop.staName)}
