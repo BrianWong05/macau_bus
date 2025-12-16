@@ -60,11 +60,13 @@ const RouteTimelineItem: React.FC<RouteTimelineItemProps> = ({ stop, index, isLa
 
   // Determine line color based on traffic level
   const getLineColor = (level: number) => {
-     switch (parseInt(level.toString())) {
+     const val = parseInt(level.toString());
+     if (val >= 4) return 'bg-red-900'; // Severe (4 or higher)
+
+     switch (val) {
          case 1: return 'bg-emerald-400'; // Smooth
          case 2: return 'bg-yellow-400';  // Moderate
          case 3: return 'bg-red-500';     // Congested
-         case 4: return 'bg-red-900';     // Severe
          default: return 'bg-gray-200';   // Unknown
      }
   };
