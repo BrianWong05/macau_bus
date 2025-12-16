@@ -55,7 +55,16 @@ const ActiveBusMarker: React.FC<ActiveBusMarkerProps> = ({ bus, onClick, isExpan
   );
 };
 
-const RouteTimelineItem: React.FC<RouteTimelineItemProps> = ({ stop, index, isLast, buses, trafficLevel }) => {
+interface RouteTimelineItemProps {
+  stop: any;
+  index: number;
+  isLast: boolean;
+  buses: any[];
+  trafficLevel: number;
+  eta: string | null;
+}
+
+const RouteTimelineItem: React.FC<RouteTimelineItemProps> = ({ stop, index, isLast, buses, trafficLevel, eta }) => {
   const [expandedBus, setExpandedBus] = useState<number | null>(null);
 
   // Determine line color based on traffic level
@@ -105,9 +114,17 @@ const RouteTimelineItem: React.FC<RouteTimelineItemProps> = ({ stop, index, isLa
              <h3 className="text-base font-bold text-gray-800 leading-tight group-hover:text-teal-700 transition-colors">
                {index + 1}. {getLocalizedStopName(stop.staCode, stop.staName)}
              </h3>
-             <div className="text-xs text-gray-400 font-mono mt-0.5">
-               {stop.staCode}
-               {stop.laneName && <span className="ml-2 text-teal-600 bg-teal-50 px-1 rounded border border-teal-100">{stop.laneName}</span>}
+             <div className="flex items-center gap-2 mt-0.5">
+                <div className="text-xs text-gray-400 font-mono">
+                  {stop.staCode}
+                  {stop.laneName && <span className="ml-2 text-teal-600 bg-teal-50 px-1 rounded border border-teal-100">{stop.laneName}</span>}
+                </div>
+                {/* ETA Display */}
+                {eta && (
+                  <span className="text-xs font-bold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-100 animate-pulse">
+                    {eta} min
+                  </span>
+                )}
              </div>
            </div>
         </div>
@@ -125,6 +142,15 @@ interface BusListProps {
 }
 
 const BusList: React.FC<BusListProps> = ({ stops, trafficData }) => {
+    // Helper to find the nearest bus index before or at current stop
+    // We'll traverse and memoize bus positions
+    const busPositions: number[] = [];
+    stops.forEach((stop, idx) => {
+        if (stop.buses && stop.buses.length > 0) {
+            busPositions.push(idx);
+        }
+    });
+
     return (
         <div className="py-6 px-2 relative">
             {/* Start Decoration */}
@@ -132,11 +158,30 @@ const BusList: React.FC<BusListProps> = ({ stops, trafficData }) => {
             
             {stops.map((stop, index) => {
                 // Fallback to index-based matching if trafficData is array-aligned (likely the case)
-                // Also try code match if available
                 let segmentTraffic = 0;
                 if (trafficData && trafficData[index]) {
                     segmentTraffic = trafficData[index].traffic;
                 }
+
+                // Calculate ETA
+                let predictedEta: string | null = null;
+                // Find closest bus BEHIND this stop (so index of bus < index of stop)
+                // Filter positions less than current index, take the largest one (closest)
+                const precedingBuses = busPositions.filter(p => p <= index);
+                const closestBusIndex = precedingBuses.length > 0 ? precedingBuses[precedingBuses.length - 1] : -1;
+
+                if (closestBusIndex !== -1 && closestBusIndex < index) {
+                    const stopsAway = index - closestBusIndex;
+                    // Heuristic: 2.5 mins per stop
+                    const minutes = Math.ceil(stopsAway * 2.5);
+                    predictedEta = minutes.toString();
+                } else if (closestBusIndex === index) {
+                    predictedEta = "Arrived";
+                }
+
+                // Don't show "Arrived" for the bus that is AT the stop (redundant with the icon), 
+                // only show future ETAs for downstream stops
+                if (predictedEta === "Arrived") predictedEta = null;
 
                 return (
                     <RouteTimelineItem
@@ -146,6 +191,7 @@ const BusList: React.FC<BusListProps> = ({ stops, trafficData }) => {
                         isLast={index === stops.length - 1}
                         buses={stop.buses}
                         trafficLevel={segmentTraffic}
+                        eta={predictedEta}
                     />
                 );
             })}
