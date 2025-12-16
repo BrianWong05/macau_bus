@@ -72,100 +72,47 @@ export const RouteMapModal: React.FC<RouteMapModalProps> = ({
             
             const totalSegments = (traffic || []).length;
             
-            // Helper to find closest segment index for a stop
-            const findClosestSegment = (stopId: string) => {
-              const stopInfo = getStopInfo(stopId);
-              
-              if (!stopInfo || !traffic || traffic.length === 0) return -1;
-              
-              const stopLat = stopInfo.lat;
-              const stopLng = stopInfo.lon;
-              
+            // SIMPLIFIED APPROACH: Use only the number of stops in the leg
+            // The leg has leg.stops = array of stop IDs.
+            // We need to show exactly leg.stops.length - 1 segments.
+            // To find the START, we use geometric matching only for the first stop.
+            
+            let startIdx = -1;
+            const firstStopInfo = getStopInfo(leg.stops[0]);
+            
+            if (firstStopInfo && traffic && traffic.length > 0) {
+              const stopLat = firstStopInfo.lat;
+              const stopLng = firstStopInfo.lon;
               let minDist = Infinity;
-              let closestIdx = -1;
               
+              // Find the segment that STARTS at our boarding stop
               traffic.forEach((seg: TrafficSegment, idx: number) => {
                 if (seg.path && seg.path.length > 0) {
-                  // check all points in segment path to be more accurate
-                  for (const point of seg.path) {
-                    const dist = Math.abs(point[0] - stopLat) + Math.abs(point[1] - stopLng);
-                    if (dist < minDist) {
-                      minDist = dist;
-                      closestIdx = idx;
-                    }
+                  const startPt = seg.path[0];
+                  const dist = Math.abs(startPt[0] - stopLat) + Math.abs(startPt[1] - stopLng);
+                  if (dist < minDist) {
+                    minDist = dist;
+                    startIdx = idx;
                   }
                 }
               });
-              
-              return closestIdx;
-            };
-
-            // Find start and end indices using geometric matching
-            const startSegIdx = findClosestSegment(leg.stops[0]);
-            const endSegIdx = findClosestSegment(leg.stops[leg.stops.length - 1]);
-            
-            // Start/End Refinement Heuristic
-            // findClosestSegment finds the segment *containing* the closest point.
-            // But we want the segment that *starts* at the stop (for correct slicing).
-            // Usually if findClosest picks 'Arriving' (Ends at stop), we want Next (Starts at stop).
-            // If it picks 'Leaving' (Starts at stop), we want Current.
-            // We check dist(seg.start, stop) for current and next to decide.
-            
-            // Adjusted Heuristic: Head vs Tail Proximity
-            // Instead of checking the next segment, we look at the matched segment itself.
-            // If the stop is closer to the END of the matched segment, the cut point is AFTER this segment (idx + 1).
-            // If the stop is closer to the START of the matched segment, the cut point is BEFORE this segment (idx).
-            // This logic works for both Start (Boarding) and End (Alighting) boundaries.
-            
-            const getAdjustedIndex = (baseIdx: number, stopId: string) => {
-               if (baseIdx === -1) return 0;
-               
-               const s = getStopInfo(stopId);
-               if (!s) return baseIdx;
-               
-               const seg = traffic[baseIdx];
-               if (!seg.path || seg.path.length === 0) return baseIdx;
-               
-               const startPt = seg.path[0];
-               const endPt = seg.path[seg.path.length - 1];
-               
-               const distStart = Math.abs(startPt[0] - s.lat) + Math.abs(startPt[1] - s.lon);
-               const distEnd = Math.abs(endPt[0] - s.lat) + Math.abs(endPt[1] - s.lon);
-               
-               // If closer to End, boundary is baseIdx + 1
-               // If closer to Start (or equal), boundary is baseIdx
-               return distEnd < distStart ? baseIdx + 1 : baseIdx;
-            };
-
-            const startSegIdxRefined = getAdjustedIndex(startSegIdx, leg.stops[0]);
-            const endSegIdxRefined = getAdjustedIndex(endSegIdx, leg.stops[leg.stops.length - 1]);
-            
-            let start = 0;
-            let end = totalSegments;
-            
-            if (startSegIdx !== -1 && endSegIdx !== -1) {
-               start = startSegIdxRefined;
-               end = endSegIdxRefined;
-               
-               // Sanity checks
-               if (start > end) { 
-                 // If inverted, maybe we picked the wrong end of a loop?
-                 // Fallback to simple logic or clamp
-                 // But trust the heuristic first, maybe just swap if strictly inverted?
-                 // Actually, if start > end, it means we calculated Start AFTER End.
-                 // This implies overlapping matches or loop. 
-                 // Force consistent order:
-                 end = Math.max(start + 1, end); 
-               }
-               
-               // Clamp to bounds
-               start = Math.max(0, Math.min(start, totalSegments - 1));
-               end = Math.max(0, Math.min(end, totalSegments));
-               
-               console.log(`Route ${routeNo}: Refined [${startSegIdx}->${startSegIdxRefined}, ${endSegIdx}->${endSegIdxRefined}] showing [${start}->${end}]`);
-            } else {
-              console.log(`Route ${routeNo}: Geometric fallback (s:${startSegIdx} e:${endSegIdx}), showing full route`);
             }
+            
+            // If we couldn't find start, default to 0
+            if (startIdx === -1) startIdx = 0;
+            
+            // Calculate the number of segments based on the number of stops
+            // N stops means N-1 segments (e.g., A->B = 1 segment)
+            const numSegments = Math.max(1, leg.stops.length - 1);
+            
+            let start = startIdx;
+            let end = startIdx + numSegments;
+            
+            // Clamp to bounds
+            start = Math.max(0, Math.min(start, totalSegments - 1));
+            end = Math.max(start + 1, Math.min(end, totalSegments));
+            
+            console.log(`Route ${routeNo}: Using stop count approach. Start=${start}, NumSegments=${numSegments}, End=${end} (Total: ${totalSegments}, Stops: ${leg.stops.length})`);
             
             newSegmentIndices[key] = { start, end };
           } catch (e) {

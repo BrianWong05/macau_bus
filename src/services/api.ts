@@ -86,10 +86,7 @@ export const fetchTrafficApi = async (rNoRaw: string | number, dir: string) => {
                  return {
                      traffic: item.newRouteTraffic || item.routeTraffic,
                      path: coords,
-                     // We can also extract station coords here if needed for hydration
-                     // But traffic API structure is complex, usually we just need segments. 
-                     // Wait, MapComponent uses traffic data for hydration, so we must ensure we pass enough info.
-                     // The original code returned 'segments'.
+                     stationCode: item.stationCode || item.stopCode || item.staCode
                  };
              });
              return segments;
