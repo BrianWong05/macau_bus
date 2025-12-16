@@ -63,7 +63,6 @@ export const RouteMapModal: React.FC<RouteMapModalProps> = ({
   onClose,
   legs,
   startWalk,
-  endWalk,
   startCoords,
   endCoords
 }) => {
@@ -81,6 +80,9 @@ export const RouteMapModal: React.FC<RouteMapModalProps> = ({
       const newTrafficData: Record<string, TrafficSegment[]> = {};
       const newSegmentIndices: Record<string, { start: number; end: number }> = {};
 
+      // Import gov_data for stop coordinates
+      const govData = await import('@/data/gov_data.json');
+
       for (const leg of legs) {
         // Parse routeId (e.g., "22_0" -> route "22", direction "0")
         const [routeNo, dir] = leg.routeId.split('_');
@@ -91,16 +93,134 @@ export const RouteMapModal: React.FC<RouteMapModalProps> = ({
             const traffic = await fetchTrafficApi(routeNo, dir);
             newTrafficData[key] = traffic || [];
             
-            // Use the leg's fromStopIndex directly - this is the exact position
-            // in the full route where the user's journey starts
-            const numSegmentsNeeded = leg.stops.length - 1;
             const totalSegments = (traffic || []).length;
-            const startIdx = leg.fromStopIndex || 0;
             
-            newSegmentIndices[key] = {
-              start: startIdx,
-              end: Math.min(startIdx + numSegmentsNeeded, totalSegments)
+            // Helper to get stop info with strict priority
+            const getStopInfo = (stopId: string) => {
+              const normalizedId = stopId.replace('/', '_');
+              const baseId = stopId.split('/')[0].split('_')[0];
+              
+              // 1. Try strict match first
+              let match = govData.default.stops.find((s: any) => 
+                s.raw?.P_ALIAS === stopId || 
+                s.raw?.P_ALIAS === normalizedId
+              );
+              
+              // 2. Try Alias match (specific pole alias might match ALIAS?)
+              if (!match) {
+                 match = govData.default.stops.find((s: any) => 
+                   s.raw?.ALIAS === stopId || 
+                   s.raw?.ALIAS === normalizedId
+                 );
+              }
+              
+              // 3. Fallback to base ID (fuzzy)
+              if (!match) {
+                 match = govData.default.stops.find((s: any) => 
+                   s.raw?.ALIAS === baseId || 
+                   s.raw?.P_ALIAS?.startsWith(baseId + '_')
+                 );
+              }
+              
+              return match;
             };
+            
+            // Helper to find closest segment index for a stop
+            const findClosestSegment = (stopId: string) => {
+              const stopInfo = getStopInfo(stopId);
+              
+              if (!stopInfo || !traffic || traffic.length === 0) return -1;
+              
+              const stopLat = stopInfo.lat;
+              const stopLng = stopInfo.lon;
+              
+              let minDist = Infinity;
+              let closestIdx = -1;
+              
+              traffic.forEach((seg: TrafficSegment, idx: number) => {
+                if (seg.path && seg.path.length > 0) {
+                  // check all points in segment path to be more accurate
+                  for (const point of seg.path) {
+                    const dist = Math.abs(point[0] - stopLat) + Math.abs(point[1] - stopLng);
+                    if (dist < minDist) {
+                      minDist = dist;
+                      closestIdx = idx;
+                    }
+                  }
+                }
+              });
+              
+              return closestIdx;
+            };
+
+            // Find start and end indices using geometric matching
+            const startSegIdx = findClosestSegment(leg.stops[0]);
+            const endSegIdx = findClosestSegment(leg.stops[leg.stops.length - 1]);
+            
+            // Start/End Refinement Heuristic
+            // findClosestSegment finds the segment *containing* the closest point.
+            // But we want the segment that *starts* at the stop (for correct slicing).
+            // Usually if findClosest picks 'Arriving' (Ends at stop), we want Next (Starts at stop).
+            // If it picks 'Leaving' (Starts at stop), we want Current.
+            // We check dist(seg.start, stop) for current and next to decide.
+            
+            // Adjusted Heuristic: Head vs Tail Proximity
+            // Instead of checking the next segment, we look at the matched segment itself.
+            // If the stop is closer to the END of the matched segment, the cut point is AFTER this segment (idx + 1).
+            // If the stop is closer to the START of the matched segment, the cut point is BEFORE this segment (idx).
+            // This logic works for both Start (Boarding) and End (Alighting) boundaries.
+            
+            const getAdjustedIndex = (baseIdx: number, stopId: string) => {
+               if (baseIdx === -1) return 0;
+               
+               const s = getStopInfo(stopId);
+               if (!s) return baseIdx;
+               
+               const seg = traffic[baseIdx];
+               if (!seg.path || seg.path.length === 0) return baseIdx;
+               
+               const startPt = seg.path[0];
+               const endPt = seg.path[seg.path.length - 1];
+               
+               const distStart = Math.abs(startPt[0] - s.lat) + Math.abs(startPt[1] - s.lon);
+               const distEnd = Math.abs(endPt[0] - s.lat) + Math.abs(endPt[1] - s.lon);
+               
+               // If closer to End, boundary is baseIdx + 1
+               // If closer to Start (or equal), boundary is baseIdx
+               return distEnd < distStart ? baseIdx + 1 : baseIdx;
+            };
+
+            const startSegIdxRefined = getAdjustedIndex(startSegIdx, leg.stops[0]);
+            const endSegIdxRefined = getAdjustedIndex(endSegIdx, leg.stops[leg.stops.length - 1]);
+            
+            let start = 0;
+            let end = totalSegments;
+            
+            if (startSegIdx !== -1 && endSegIdx !== -1) {
+               start = startSegIdxRefined;
+               end = endSegIdxRefined;
+               
+               // Sanity checks
+               if (start > end) { 
+                 // If inverted, maybe we picked the wrong end of a loop?
+                 // Fallback to simple logic or clamp
+                 // But trust the heuristic first, maybe just swap if strictly inverted?
+                 // Actually, if start > end, it means we calculated Start AFTER End.
+                 // This implies overlapping matches or loop. 
+                 // Force consistent order:
+                 end = Math.max(start + 1, end); 
+               }
+               
+               // Clamp to bounds
+               start = Math.max(0, Math.min(start, totalSegments - 1));
+               end = Math.max(0, Math.min(end, totalSegments));
+               
+               console.log(`Route ${routeNo}: Refined [${startSegIdx}->${startSegIdxRefined}, ${endSegIdx}->${endSegIdxRefined}] showing [${start}->${end}]`);
+            } else {
+              console.log(`Route ${routeNo}: Geometric fallback (s:${startSegIdx} e:${endSegIdx}), showing full route`);
+            }
+            
+            newSegmentIndices[key] = { start, end };
           } catch (e) {
             console.error(`Failed to fetch traffic for ${routeNo}:`, e);
             newTrafficData[key] = [];
@@ -187,14 +307,17 @@ export const RouteMapModal: React.FC<RouteMapModalProps> = ({
             </>
           )}
 
-          {/* Traffic-colored route polylines - show full route */}
+          {/* Traffic-colored route polylines - filtered to user's journey */}
           {legs.map((leg, legIdx) => {
             const allTraffic = trafficData[leg.routeId] || [];
+            const indices = segmentIndices[leg.routeId];
             
-            if (allTraffic.length === 0) return null;
+            if (allTraffic.length === 0 || !indices) return null;
             
-            // Show full route for now - partial filtering needs more work
-            return allTraffic.map((seg, segIdx) => {
+            // Filter using calculated indices
+            const filteredSegments = allTraffic.slice(indices.start, indices.end);
+            
+            return filteredSegments.map((seg, segIdx) => {
               if (!seg.path || seg.path.length < 2) return null;
               
               const color = seg.traffic === 1 ? '#22c55e' // green
@@ -214,37 +337,73 @@ export const RouteMapModal: React.FC<RouteMapModalProps> = ({
             });
           })}
 
-          {/* Station markers from traffic data */}
+          {/* Station markers - filtered match polylines */}
           {legs.map((leg, legIdx) => {
             const allTraffic = trafficData[leg.routeId] || [];
+            const indices = segmentIndices[leg.routeId];
             
-            if (allTraffic.length === 0) return null;
+            if (allTraffic.length === 0 || !indices) return null;
             
-            return allTraffic.map((seg, segIdx) => {
-              if (!seg.path || seg.path.length === 0) return null;
-              const startPoint = seg.path[0];
-              
-              const color = seg.traffic === 1 ? '#22c55e'
-                          : seg.traffic === 2 ? '#f97316'
-                          : seg.traffic >= 3 ? '#ef4444'
-                          : '#14b8a6';
-              
-              return (
-                <CircleMarker
-                  key={`marker-${legIdx}-${segIdx}`}
-                  center={startPoint}
-                  radius={5}
-                  fillColor="white"
-                  color={color}
-                  weight={2}
-                  fillOpacity={1}
-                />
-              );
-            });
+            // Use same filtered set
+            const filteredSegments = allTraffic.slice(indices.start, indices.end);
+            
+            return (
+              <React.Fragment key={`markers-${legIdx}`}>
+                {filteredSegments.map((seg, segIdx) => {
+                  if (!seg.path || seg.path.length === 0) return null;
+                  const startPoint = seg.path[0];
+                  
+                  const color = seg.traffic === 1 ? '#22c55e'
+                              : seg.traffic === 2 ? '#f97316'
+                              : seg.traffic >= 3 ? '#ef4444'
+                              : '#14b8a6';
+                  
+                  return (
+                    <CircleMarker
+                      key={`marker-${legIdx}-${segIdx}`}
+                      center={startPoint}
+                      radius={5}
+                      fillColor="white"
+                      color={color}
+                      weight={2}
+                      fillOpacity={1}
+                    />
+                  );
+                })}
+                
+                {/* Add final destination marker at the end of the line */}
+                {filteredSegments.length > 0 && (() => {
+                  const lastSeg = filteredSegments[filteredSegments.length - 1];
+                  const lastPoint = lastSeg.path[lastSeg.path.length - 1];
+                  const dotIcon = L.divIcon({
+                    className: '',
+                    html: `<div style="
+                      width: 8px;
+                      height: 8px;
+                      background-color: white;
+                      border: 2px solid #14b8a6;
+                      border-radius: 50%;
+                      box-sizing: content-box;
+                    "></div>`,
+                    iconSize: [12, 12],
+                    iconAnchor: [6, 6] // Center the dot
+                  });
+
+                  return (
+                    <Marker
+                      key={`marker-${legIdx}-end`}
+                      position={lastPoint}
+                      icon={dotIcon}
+                      zIndexOffset={1000} // Force on top of the Blue Pin
+                    />
+                  );
+                })()}
+              </React.Fragment>
+            );
           })}
 
-          {/* Walking path to destination */}
-          {endCoords && endWalk && endWalk.durationMinutes > 0 && (
+          {/* Destination markers - always show if we have coords */}
+          {endCoords && (
             <Marker position={[endCoords.lat, endCoords.lng]}>
               <Popup>{t('route_result.destination', 'Destination')}</Popup>
             </Marker>
