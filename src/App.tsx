@@ -275,17 +275,15 @@ function App() {
           </>
         )}
 
-        {/* Route Planner Tab */}
-        {activeTab === 'planner' && (
-          <div className="flex-1 overflow-y-auto pb-16 relative">
-            <RoutePlanner 
-              onViewRouteStatus={(route, stopCode) => {
-                setActiveTab('live');
-                handleSelectRoute(route, stopCode);
-              }}
-            />
-          </div>
-        )}
+        {/* Route Planner Tab - Keep mounted to preserve state */}
+        <div className={`flex-1 overflow-y-auto pb-16 relative ${activeTab === 'planner' ? 'block' : 'hidden'}`}>
+          <RoutePlanner 
+            onViewRouteStatus={(route, stopCode) => {
+              setActiveTab('live');
+              handleSelectRoute(route, stopCode);
+            }}
+          />
+        </div>
 
         {/* Bottom Navigation */}
         <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
