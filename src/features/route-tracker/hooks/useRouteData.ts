@@ -6,6 +6,7 @@ import { useState, useCallback, useRef } from 'react';
 import {
   fetchRouteDataApi,
   fetchTrafficApi,
+  fetchRouteOperationTimeApi,
   fetchBusListApi,
   fetchMapLocationApi,
 } from '@/services/api';
@@ -177,7 +178,12 @@ export const useRouteData = (): UseRouteDataReturn => {
       activeRouteRef.current = routeToFetch;
 
       try {
-        const data = await fetchRouteDataApi(routeToFetch, dirToFetch);
+        // Fetch Route Data (Stops)
+        const dataPromise = fetchRouteDataApi(routeToFetch, dirToFetch);
+        // Fetch Operation Time (Parallel)
+        const opTimePromise = fetchRouteOperationTimeApi(routeToFetch, dirToFetch);
+
+        const [data, opTimeData] = await Promise.all([dataPromise, opTimePromise]);
 
         if (activeRouteRef.current !== routeToFetch) return;
 
@@ -188,11 +194,21 @@ export const useRouteData = (): UseRouteDataReturn => {
             trafficLevel: 0,
           }));
 
+          // Parse OpTime
+          // Structure from logs: [{"data":[{"dir":"0","display":"0","firstBusTime":"06:15","lastBusTime":"00:00","msg":"","routeName":"2"}],"header":{"status":"000"}}]
+          // It's an array containing an object with a data array.
+          const opTimeInfo = Array.isArray(opTimeData) && opTimeData.length > 0 ? opTimeData[0]?.data?.[0] : null;
+          
+          const firstBusTime = opTimeInfo?.firstBusTime || opTimeInfo?.startTime || '';
+          const lastBusTime = opTimeInfo?.lastBusTime || opTimeInfo?.endTime || '';
+
           setBusData({
             stops,
             buses: [],
             raw: data.data,
             direction: dirToFetch,
+            firstBusTime,
+            lastBusTime,
           });
 
           fetchRealtimeBus(routeToFetch, dirToFetch, stops);

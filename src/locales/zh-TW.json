@@ -35,6 +35,8 @@
   "search_stop_placeholder": "輸入車站名稱...",
   "routes_at_stop": "途經路線",
   "current_location": "現時位於",
+  "first_bus": "頭班車",
+  "last_bus": "尾班車",
   "nav": {
     "live_status": "實時狀態",
     "route_planner": "路線規劃"

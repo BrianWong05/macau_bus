@@ -29,4 +29,6 @@ export interface RouteData {
   buses: any[];
   raw: any;
   direction: string;
+  firstBusTime?: string;
+  lastBusTime?: string;
 }

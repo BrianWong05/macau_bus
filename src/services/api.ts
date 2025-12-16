@@ -162,3 +162,37 @@ export const fetchMapLocationApi = async (rNo: string, dir: string) => {
           throw e;
       }
 };
+
+// 5. Fetch Route Operation Time
+export const fetchRouteOperationTimeApi = async (rNo: string, dir: string) => {
+      const params = {
+          routeName: rNo,
+          dir: dir,
+          lang: 'zh_tw',
+          action: 'opstime',
+          device: 'web',
+          BypassToken: 'HuatuTesting0307'
+      };
+      
+      const token = generateDsatToken(params);
+      
+      // Use Cloudflare Worker proxy in production
+      const targetUrl = proxyUrl('/ddbus/route/operationtime');
+      const qs = new URLSearchParams(params).toString();
+
+      try {
+        const res = await axios.post(targetUrl, qs,
+            { 
+                headers: { 
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'token': token
+                } 
+            }
+        );
+        return res.data;
+      } catch (err) {
+          console.error("OpTime Fetch Error:", err);
+          return null;
+      }
+};
+

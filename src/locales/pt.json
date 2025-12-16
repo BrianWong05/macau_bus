@@ -35,6 +35,8 @@
   "search_stop_placeholder": "Digite o nome da paragem...",
   "routes_at_stop": "Rotas",
   "current_location": "Atualmente em",
+  "first_bus": "Primeiro",
+  "last_bus": "Último",
   "nav": {
     "live_status": "Estado ao Vivo",
     "route_planner": "Planejador de Rotas"

@@ -35,6 +35,8 @@
   "search_stop_placeholder": "Enter stop name...",
   "routes_at_stop": "Routes",
   "current_location": "Currently At",
+  "first_bus": "First Bus",
+  "last_bus": "Last Bus",
   "nav": {
     "live_status": "Live Status",
     "route_planner": "Route Planner"
