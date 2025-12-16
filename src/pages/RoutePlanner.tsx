@@ -331,7 +331,7 @@ export const RoutePlanner: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-teal-600 to-emerald-600 text-white px-4 py-6 shadow-lg">
+      <div className="bg-gradient-to-r from-teal-600 to-emerald-600 text-white px-4 py-6 shadow-lg sticky top-0 z-30">
         <div className="max-w-md mx-auto relative">
           <div className="flex justify-between items-start">
             <div>
