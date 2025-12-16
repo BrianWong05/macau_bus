@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import MapComponent from '@/components/MapComponent';
 import BusList from '@/components/BusList';
-import RouteDashboard from '@/components/RouteDashboard';
+import RouteDashboard from '@/pages/RouteDashboard';
 import { useRouteData, AppHeader, RouteControls, RouteStatusBanner } from '@/features/route-tracker';
 import { fetchTrafficApi } from '@/services/api';
 import { BottomNavigation, NavigationTab } from '@/components/BottomNavigation';

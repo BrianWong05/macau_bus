@@ -1,34 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
 import { RouteFinder, RouteResult, BusStop, TripResult } from '@/services/RouteFinder';
-import { RouteResultCard } from '@/components/RouteResultCard';
 import { RouteMapModal } from '@/components/RouteMapModal';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { searchPlace, PlaceResult } from '@/services/Geocoding';
-
-// Fix for default marker icon
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
-const DefaultIcon = L.icon({
-  iconUrl: icon,
-  shadowUrl: iconShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41]
-});
-L.Marker.prototype.options.icon = DefaultIcon;
+import { PlannerMap } from '@/components/planner/PlannerMap';
+import { SearchForm } from '@/components/planner/SearchForm';
+import { RouteResultsList } from '@/components/planner/RouteResultsList';
 
 // ============== Icons (Inline SVG) ==============
 
-const MapPinIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-    <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-  </svg>
-);
+
 
 const NavigationIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
   <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -36,11 +18,7 @@ const NavigationIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5
   </svg>
 );
 
-const ArrowsUpDownIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-  </svg>
-);
+
 
 const SearchIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
   <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -48,13 +26,7 @@ const SearchIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" })
   </svg>
 );
 
-const CrosshairIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <circle cx="12" cy="12" r="10" />
-    <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
-    <circle cx="12" cy="12" r="3" />
-  </svg>
-);
+
 
 const LoaderIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" }) => (
   <svg className={`${className} animate-spin`} fill="none" viewBox="0 0 24 24">
@@ -63,56 +35,7 @@ const LoaderIcon: React.FC<{ className?: string }> = ({ className = "w-5 h-5" })
   </svg>
 );
 
-// ============== Map Helper ==============
 
-interface FitBoundsProps {
-  startCoords: { lat: number; lng: number } | null;
-  endCoords: { lat: number; lng: number } | null;
-  lastSelectedField: 'start' | 'end' | null;
-}
-
-const FitBoundsComponent: React.FC<FitBoundsProps> = ({ startCoords, endCoords, lastSelectedField }) => {
-  const map = useMap();
-  
-  useEffect(() => {
-    // Zoom to the most recently selected location
-    if (lastSelectedField === 'end' && endCoords) {
-      map.setView([endCoords.lat, endCoords.lng], 17);
-    } else if (lastSelectedField === 'start' && startCoords) {
-      map.setView([startCoords.lat, startCoords.lng], 17);
-    } else if (startCoords && endCoords) {
-      // If no specific field selected, fit both
-      const bounds = L.latLngBounds([
-        [startCoords.lat, startCoords.lng],
-        [endCoords.lat, endCoords.lng]
-      ]);
-      map.fitBounds(bounds, { padding: [50, 50] });
-    } else if (startCoords) {
-      map.setView([startCoords.lat, startCoords.lng], 17);
-    } else if (endCoords) {
-      map.setView([endCoords.lat, endCoords.lng], 17);
-    }
-  }, [map, startCoords, endCoords, lastSelectedField]);
-  
-  return null;
-};
-
-// Map click handler for pin drop
-interface MapClickHandlerProps {
-  pinDropMode: 'start' | 'end' | null;
-  onMapClick: (lat: number, lng: number, mode: 'start' | 'end') => void;
-}
-
-const MapClickHandler: React.FC<MapClickHandlerProps> = ({ pinDropMode, onMapClick }) => {
-  useMapEvents({
-    click: (e) => {
-      if (pinDropMode) {
-        onMapClick(e.latlng.lat, e.latlng.lng, pinDropMode);
-      }
-    },
-  });
-  return null;
-};
 
 // ============== Main Component ==============
 
@@ -448,257 +371,40 @@ export const RoutePlanner: React.FC = () => {
           </div>
         )}
 
-        {/* Input Section */}
+        {/* Search Form */}
         {!isRouteFinderLoading && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-            {/* From Input */}
-            <div className="relative mb-4">
-              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
-                {t('route_planner.from', 'From')}
-              </label>
-              <div className="flex gap-2">
-                <div className="flex-1 relative">
-                  <MapPinIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500" />
-                  <input
-                    type="text"
-                    value={startInput}
-                    onChange={(e) => handleStartChange(e.target.value)}
-                    onFocus={() => setActiveField('start')}
-                    onBlur={handleBlur}
-                    placeholder={t('route_planner.search_placeholder', 'Search stop name or ID')}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
-                  />
-                  {(suggestions.length > 0 || placeResults.length > 0) && activeField === 'start' && (
-                    <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-1 max-h-60 overflow-y-auto">
-                      {suggestions.map(stop => (
-                        <button
-                          key={stop.id}
-                          className="w-full text-left px-4 py-2 hover:bg-teal-50 border-b border-gray-50 last:border-0"
-                          onClick={() => selectStop(stop, 'start')}
-                        >
-                          <div className="font-bold text-gray-800">{stop.name}</div>
-                          <div className="text-xs text-teal-600 font-mono">{stop.id}</div>
-                        </button>
-                      ))}
-                      {/* Place Results */}
-                      {placeResults.length > 0 && (
-                        <>
-                          <div className="px-4 py-1 text-xs text-gray-400 bg-gray-50 font-semibold">Places</div>
-                          {placeResults.map((place, idx) => (
-                            <button
-                              key={`place-${idx}`}
-                              className="w-full text-left px-4 py-2 hover:bg-blue-50 border-b border-gray-50 last:border-0"
-                              onClick={() => selectPlace(place, 'start')}
-                            >
-                              <div className="font-bold text-gray-800">{place.name}</div>
-                              <div className="text-xs text-blue-600">📍 Place</div>
-                            </button>
-                          ))}
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={handleUseMyLocation}
-                  disabled={locatingStart}
-                  className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
-                  title={t('route_planner.use_location', 'Use my location')}
-                >
-                  {locatingStart ? (
-                    <LoaderIcon className="w-5 h-5 text-gray-600" />
-                  ) : (
-                    <CrosshairIcon className="w-5 h-5 text-gray-600" />
-                  )}
-                </button>
-              </div>
-              {/* Optional: Show ID if selected */}
-              {selectedStart && startInput !== selectedStart.id && (
-                  <p className="text-xs text-teal-600 mt-1 pl-10">
-                      ID: {selectedStart.id}
-                  </p>
-              )}
-            </div>
-
-            {/* Swap Button */}
-            <div className="flex justify-center -my-2 relative z-10">
-              <button
-                onClick={handleSwap}
-                className="w-10 h-10 bg-white border-2 border-gray-200 rounded-full flex items-center justify-center hover:bg-gray-50 hover:border-teal-400 transition-colors shadow-sm"
-                title={t('route_planner.swap', 'Swap')}
-              >
-                <ArrowsUpDownIcon className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-
-            {/* To Input */}
-            <div className="relative mt-4">
-              <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
-                {t('route_planner.to', 'To')}
-              </label>
-              <div className="relative">
-                <MapPinIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-red-500" />
-                <input
-                  type="text"
-                  value={endInput}
-                  onChange={(e) => handleEndChange(e.target.value)}
-                  onFocus={() => setActiveField('end')}
-                  onBlur={handleBlur}
-                  placeholder={t('route_planner.search_placeholder', 'Search stop name or ID')}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
-                />
-                {(suggestions.length > 0 || placeResults.length > 0) && activeField === 'end' && (
-                    <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-1 max-h-60 overflow-y-auto">
-                      {suggestions.map(stop => (
-                        <button
-                          key={stop.id}
-                          className="w-full text-left px-4 py-2 hover:bg-teal-50 border-b border-gray-50 last:border-0"
-                          onClick={() => selectStop(stop, 'end')}
-                        >
-                          <div className="font-bold text-gray-800">{stop.name}</div>
-                          <div className="text-xs text-teal-600 font-mono">{stop.id}</div>
-                        </button>
-                      ))}
-                      {/* Place Results */}
-                      {placeResults.length > 0 && (
-                        <>
-                          <div className="px-4 py-1 text-xs text-gray-400 bg-gray-50 font-semibold">Places</div>
-                          {placeResults.map((place, idx) => (
-                            <button
-                              key={`place-end-${idx}`}
-                              className="w-full text-left px-4 py-2 hover:bg-blue-50 border-b border-gray-50 last:border-0"
-                              onClick={() => selectPlace(place, 'end')}
-                            >
-                              <div className="font-bold text-gray-800">{place.name}</div>
-                              <div className="text-xs text-blue-600">📍 Place</div>
-                            </button>
-                          ))}
-                        </>
-                      )}
-                    </div>
-                  )}
-              </div>
-              {selectedEnd && endInput !== selectedEnd.id && (
-                  <p className="text-xs text-teal-600 mt-1 pl-10">
-                      ID: {selectedEnd.id}
-                  </p>
-              )}
-            </div>
-
-            {/* Search Button */}
-            <button
-              onClick={handleFindRoute}
-              disabled={loading || !startInput || !endInput}
-              className="w-full mt-6 py-3.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <LoaderIcon className="w-5 h-5" />
-                  {t('route_planner.searching', 'Searching...')}
-                </>
-              ) : (
-                <>
-                  <SearchIcon className="w-5 h-5" />
-                  {t('route_planner.find_route', 'Find Route')}
-                </>
-              )}
-            </button>
-          </div>
+          <SearchForm
+            startInput={startInput}
+            endInput={endInput}
+            onStartChange={handleStartChange}
+            onEndChange={handleEndChange}
+            onSwap={handleSwap}
+            onFindRoute={handleFindRoute}
+            loading={loading}
+            suggestions={suggestions}
+            placeResults={placeResults}
+            activeField={activeField}
+            onFocusField={setActiveField}
+            onBlurField={handleBlur}
+            onSelectStop={selectStop}
+            onSelectPlace={selectPlace}
+            onUseMyLocation={handleUseMyLocation}
+            locatingStart={locatingStart}
+            selectedStart={selectedStart}
+            selectedEnd={selectedEnd}
+          />
         )}
 
-        {/* Map Preview - show when no results, when toggled on, or when search bar is focused */}
+        {/* Map Preview */}
         {(!results || showMapWithResults || activeField) && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden relative z-0">
-            <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-600">
-                {pinDropMode 
-                  ? t('route_planner.tap_to_set', `Tap map to set ${pinDropMode === 'start' ? 'start' : 'end'}`)
-                  : t('route_planner.map_preview', 'Location Preview')
-                }
-              </span>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => setPinDropMode(pinDropMode === 'start' ? null : 'start')}
-                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                    pinDropMode === 'start' 
-                      ? 'bg-green-500 text-white' 
-                      : 'bg-gray-200 text-gray-600 hover:bg-green-100'
-                  }`}
-                >
-                  📍 {t('route_planner.set_start', 'Set Start')}
-                </button>
-                <button
-                  onClick={() => setPinDropMode(pinDropMode === 'end' ? null : 'end')}
-                  className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                    pinDropMode === 'end' 
-                      ? 'bg-red-500 text-white' 
-                      : 'bg-gray-200 text-gray-600 hover:bg-red-100'
-                  }`}
-                >
-                  📍 {t('route_planner.set_end', 'Set End')}
-                </button>
-              </div>
-            </div>
-            <div style={{ height: '300px' }}>
-              <MapContainer
-                center={[22.1987, 113.5439]}
-                zoom={13}
-                style={{ height: '100%', width: '100%' }}
-                zoomControl={false}
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                  url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-                />
-                <FitBoundsComponent startCoords={startCoords} endCoords={endCoords} lastSelectedField={lastSelectedField} />
-                <MapClickHandler pinDropMode={pinDropMode} onMapClick={handleMapClick} />
-                
-                {/* Start Marker (Green) */}
-                {startCoords && (
-                  <Marker 
-                    position={[startCoords.lat, startCoords.lng]}
-                    icon={L.divIcon({
-                      className: '',
-                      html: `<div style="
-                        width: 14px;
-                        height: 14px;
-                        background-color: #22c55e;
-                        border: 3px solid white;
-                        border-radius: 50%;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                      "></div>`,
-                      iconSize: [20, 20],
-                      iconAnchor: [10, 10]
-                    })}
-                  >
-                    <Popup>{t('route_planner.start_location', 'Start')}</Popup>
-                  </Marker>
-                )}
-                
-                {/* End Marker (Red) */}
-                {endCoords && (
-                  <Marker 
-                    position={[endCoords.lat, endCoords.lng]}
-                    icon={L.divIcon({
-                      className: '',
-                      html: `<div style="
-                        width: 14px;
-                        height: 14px;
-                        background-color: #ef4444;
-                        border: 3px solid white;
-                        border-radius: 50%;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                      "></div>`,
-                      iconSize: [20, 20],
-                      iconAnchor: [10, 10]
-                    })}
-                  >
-                    <Popup>{t('route_planner.end_location', 'Destination')}</Popup>
-                  </Marker>
-                )}
-              </MapContainer>
-            </div>
-          </div>
+          <PlannerMap
+            startCoords={startCoords}
+            endCoords={endCoords}
+            lastSelectedField={lastSelectedField}
+            pinDropMode={pinDropMode}
+            onSetPinDropMode={setPinDropMode}
+            onMapClick={handleMapClick}
+          />
         )}
 
         {/* Error Message */}
@@ -708,55 +414,15 @@ export const RoutePlanner: React.FC = () => {
           </div>
         )}
 
-        {/* Results Section */}
-        {loading && (
-          <div className="space-y-4">
-            {/* Skeleton Loader */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 animate-pulse">
-              <div className="h-10 bg-gray-200 rounded-lg mb-4" />
-              <div className="h-24 bg-gray-100 rounded-lg mb-3" />
-              <div className="h-24 bg-gray-100 rounded-lg" />
-            </div>
-          </div>
-        )}
-
-        {results && !loading && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-700">
-                {t('route_planner.results', 'Route Found')}
-                <span className="ml-2 text-sm font-normal text-gray-500">
-                  {results.length > 1 ? `(${results.length} ${t('route_planner.options', 'options')})` : ''}
-                </span>
-              </h2>
-              <button
-                onClick={() => setShowMapWithResults(!showMapWithResults)}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-colors flex items-center gap-1 ${
-                  showMapWithResults 
-                    ? 'bg-teal-500 text-white' 
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                🗺️ {showMapWithResults ? t('route_planner.hide_map', 'Hide Map') : t('route_planner.show_map', 'Show Map')}
-              </button>
-            </div>
-            {results.map((result, index) => {
-              // Get walking segments if available
-              const trip = tripResults?.[index];
-              
-              return (
-                <div key={index} className="relative">
-                  <RouteResultCard 
-                    result={result} 
-                    startWalk={trip?.startWalk}
-                    endWalk={trip?.endWalk}
-                    onClick={() => setSelectedRouteIndex(index)}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {/* Results List */}
+        <RouteResultsList
+          results={results || []}
+          tripResults={tripResults}
+          loading={loading}
+          showMap={showMapWithResults}
+          onToggleMap={() => setShowMapWithResults(!showMapWithResults)}
+          onSelectRoute={setSelectedRouteIndex}
+        />
 
         {!loading && !results && !error && startInput && endInput && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">

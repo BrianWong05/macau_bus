@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { useTranslation } from 'react-i18next';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { fetchTrafficApi } from '@/services/api';
 import type { RouteLeg } from '@/services/RouteFinder';
-import govData from '@/data/gov_data.json';
+import { CloseIcon } from './Icons';
+import { getStopInfo } from '@/utils/stopUtils';
+import type { TrafficSegment } from '@/types/mapTypes';
+import { FitBoundsOnLoad } from './map/FitBoundsOnLoad';
+import { RoutePathLayer } from './map/RoutePathLayer';
+import { RouteMarkerLayer } from './map/RouteMarkerLayer';
 
 // Fix for default marker icon
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -19,19 +24,7 @@ const DefaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// ============== Icons ==============
-const CloseIcon = () => (
-  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-  </svg>
-);
-
 // ============== Types ==============
-interface TrafficSegment {
-  traffic: number;
-  path: [number, number][];
-}
-
 interface RouteMapModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -41,22 +34,6 @@ interface RouteMapModalProps {
   startCoords?: { lat: number; lng: number };
   endCoords?: { lat: number; lng: number };
 }
-
-// ============== FitBounds Component ==============
-const FitBoundsOnLoad: React.FC<{ points: [number, number][] }> = ({ points }) => {
-  const map = useMap();
-  
-  useEffect(() => {
-    if (points.length > 0) {
-      const bounds = L.latLngBounds(points);
-      if (bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [50, 50] });
-      }
-    }
-  }, [points, map]);
-  
-  return null;
-};
 
 // ============== Main Component ==============
 export const RouteMapModal: React.FC<RouteMapModalProps> = ({
@@ -72,35 +49,7 @@ export const RouteMapModal: React.FC<RouteMapModalProps> = ({
   const [segmentIndices, setSegmentIndices] = useState<Record<string, { start: number; end: number }>>({});
   const [loading, setLoading] = useState(false);
 
-  // Helper to get stop info with strict priority
-  const getStopInfo = React.useCallback((stopId: string) => {
-    const normalizedId = stopId.replace('/', '_');
-    const baseId = stopId.split('/')[0].split('_')[0];
-    
-    // 1. Try strict match first
-    let match = govData.stops.find((s: any) => 
-      s.raw?.P_ALIAS === stopId || 
-      s.raw?.P_ALIAS === normalizedId
-    );
-    
-    // 2. Try Alias match (specific pole alias might match ALIAS?)
-    if (!match) {
-       match = govData.stops.find((s: any) => 
-         s.raw?.ALIAS === stopId || 
-         s.raw?.ALIAS === normalizedId
-       );
-    }
-    
-    // 3. Fallback to base ID (fuzzy)
-    if (!match) {
-       match = govData.stops.find((s: any) => 
-         s.raw?.ALIAS === baseId || 
-         s.raw?.P_ALIAS?.startsWith(baseId + '_')
-       );
-    }
-    
-    return match;
-  }, []);
+  // Fetch traffic data for all route legs and find correct segment indices
 
   // Fetch traffic data for all route legs and find correct segment indices
   useEffect(() => {
@@ -232,7 +181,7 @@ export const RouteMapModal: React.FC<RouteMapModalProps> = ({
     };
 
     fetchAllTraffic();
-  }, [isOpen, legs, getStopInfo]);
+  }, [isOpen, legs]);
 
   if (!isOpen) return null;
 
@@ -305,167 +254,19 @@ export const RouteMapModal: React.FC<RouteMapModalProps> = ({
           )}
 
           {/* Traffic-colored route polylines - filtered to user's journey */}
-          {legs.map((leg, legIdx) => {
-            const allTraffic = trafficData[leg.routeId] || [];
-            const indices = segmentIndices[leg.routeId];
-            
-            if (allTraffic.length === 0 || !indices) return null;
-            
-            // Filter using calculated indices
-            const filteredSegments = allTraffic.slice(indices.start, indices.end);
-            
-            return filteredSegments.map((seg, segIdx) => {
-              if (!seg.path || seg.path.length < 2) return null;
-              
-              const color = seg.traffic === 1 ? '#22c55e' // green
-                          : seg.traffic === 2 ? '#f97316' // orange
-                          : seg.traffic >= 3 ? '#ef4444' // red
-                          : '#14b8a6'; // teal (default)
-              
-              return (
-                <Polyline
-                  key={`leg-${legIdx}-seg-${segIdx}`}
-                  positions={seg.path}
-                  color={color}
-                  weight={5}
-                  opacity={0.8}
-                />
-              );
-            });
-          })}
+          <RoutePathLayer 
+            legs={legs}
+            trafficData={trafficData}
+            segmentIndices={segmentIndices}
+          />
 
-          {/* Station markers - filtered match polylines */}
-          {legs.map((leg, legIdx) => {
-            const allTraffic = trafficData[leg.routeId] || [];
-            const indices = segmentIndices[leg.routeId];
-            
-            if (allTraffic.length === 0 || !indices) return null;
-            
-            // Use same filtered set
-            const filteredSegments = allTraffic.slice(indices.start, indices.end);
-            
-            return (
-              <React.Fragment key={`markers-${legIdx}`}>
-                {filteredSegments.map((seg, segIdx) => {
-                  if (!seg.path || seg.path.length === 0) return null;
-                  const startPoint = seg.path[0];
-                  
-                  const color = seg.traffic === 1 ? '#22c55e'
-                              : seg.traffic === 2 ? '#f97316'
-                              : seg.traffic >= 3 ? '#ef4444'
-                              : '#14b8a6';
-                  
-                  return (
-                    <CircleMarker
-                      key={`marker-${legIdx}-${segIdx}`}
-                      center={startPoint}
-                      radius={5}
-                      fillColor="white"
-                      color={color}
-                      weight={2}
-                      fillOpacity={1}
-                    />
-                  );
-                })}
-                
-                {/* Add final destination marker at the end of the line */}
-                {filteredSegments.length > 0 && (() => {
-                  const lastSeg = filteredSegments[filteredSegments.length - 1];
-                  const lastPoint = lastSeg.path[lastSeg.path.length - 1];
-                  const isTransfer = legIdx < legs.length - 1;
-                  const borderColor = isTransfer ? '#f97316' : '#14b8a6'; // Orange for transfer, Teal for dest
-                  
-                  const dotIcon = L.divIcon({
-                    className: '',
-                    html: `<div style="
-                      width: 8px;
-                      height: 8px;
-                      background-color: white;
-                      border: 2px solid ${borderColor};
-                      border-radius: 50%;
-                      box-sizing: content-box;
-                    "></div>`,
-                    iconSize: [12, 12],
-                    iconAnchor: [6, 6] // Center the dot
-                  });
-
-                  return (
-                    <Marker
-                      key={`marker-${legIdx}-end`}
-                      position={lastPoint}
-                      icon={dotIcon}
-                      zIndexOffset={1000} // Force on top of the Blue Pin
-                    />
-                  );
-                })()}
-
-                {/* Transfer UI: If not the last leg, show transfer info */}
-                {legIdx < legs.length - 1 && (() => {
-                  const currentLegEndStop = leg.stops[leg.stops.length - 1];
-                  const nextLegStartStop = legs[legIdx + 1].stops[0];
-                  
-                  // Get coordinates
-                  const endInfo = getStopInfo(currentLegEndStop);
-                  const startInfo = getStopInfo(nextLegStartStop);
-                  
-                  if (!endInfo || !startInfo) return null;
-                  
-                  const endPos: [number, number] = [endInfo.lat, endInfo.lon];
-                  const startPos: [number, number] = [startInfo.lat, startInfo.lon];
-                  
-                  // Check if walking is needed (different stops)
-                  const isWalking = currentLegEndStop !== nextLegStartStop;
-                  
-                  return (
-                    <React.Fragment key={`transfer-${legIdx}`}>
-                      {/* Transfer Marker at Alight Stop */}
-                      <Marker 
-                        position={endPos}
-                        icon={L.divIcon({
-                          className: '',
-                          html: `<div style="
-                            background-color: white;
-                            border: 2px solid #f97316;
-                            border-radius: 4px;
-                            padding: 2px 4px;
-                            font-size: 10px;
-                            font-weight: bold;
-                            color: #f97316;
-                            white-space: nowrap;
-                            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-                            transform: translate(-50%, -50%);
-                          ">${t('route_result.transfer', 'Transfer')}</div>`,
-                          iconSize: [40, 20],
-                          iconAnchor: [20, 10]
-                        })}
-                        zIndexOffset={900}
-                      />
-                      
-                      {/* Walking Path if needed */}
-                      {isWalking && (
-                        <Polyline
-                          positions={[endPos, startPos]}
-                          pathOptions={{
-                            color: '#f97316', // Orange for transfer walk
-                            dashArray: '5, 8',
-                            weight: 3,
-                            opacity: 0.8
-                          }}
-                        />
-                      )}
-                    </React.Fragment>
-                  );
-                })()}
-              </React.Fragment>
-            );
-          })}
-
-          {/* Destination markers - always show if we have coords */}
-          {endCoords && (
-            <Marker position={[endCoords.lat, endCoords.lng]}>
-              <Popup>{t('route_result.destination', 'Destination')}</Popup>
-            </Marker>
-          )}
+          {/* Station markers, destination dots, and transfer indicators */}
+          <RouteMarkerLayer 
+            legs={legs}
+            trafficData={trafficData}
+            segmentIndices={segmentIndices}
+            endCoords={endCoords}
+          />
 
           {allPoints.length > 0 && <FitBoundsOnLoad points={allPoints} />}
         </MapContainer>
