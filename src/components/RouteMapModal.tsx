@@ -5,12 +5,12 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { fetchTrafficApi } from '@/services/api';
 import type { RouteLeg } from '@/services/RouteFinder';
-import { CloseIcon } from './Icons';
+import { CloseIcon } from '@/components/Icons';
 import { getStopInfo } from '@/utils/stopUtils';
 import type { TrafficSegment } from '@/types/mapTypes';
-import { FitBoundsOnLoad } from './map/FitBoundsOnLoad';
-import { RoutePathLayer } from './map/RoutePathLayer';
-import { RouteMarkerLayer } from './map/RouteMarkerLayer';
+import { FitBoundsOnLoad } from '@/components/map/FitBoundsOnLoad';
+import { RoutePathLayer } from '@/components/map/RoutePathLayer';
+import { RouteMarkerLayer } from '@/components/map/RouteMarkerLayer';
 
 // Fix for default marker icon
 import icon from 'leaflet/dist/images/marker-icon.png';

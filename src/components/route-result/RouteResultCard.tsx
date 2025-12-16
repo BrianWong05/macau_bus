@@ -1,8 +1,8 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RouteResult } from '@/services/RouteFinder';
-import { LegCard } from './LegCard';
-import { TransferIndicator } from './TransferIndicator';
+import { LegCard } from '@/components/route-result/LegCard';
+import { TransferIndicator } from '@/components/route-result/TransferIndicator';
 import { BusIcon, WalkIcon } from '@/components/Icons';
 
 // ============== Main Component ==============
