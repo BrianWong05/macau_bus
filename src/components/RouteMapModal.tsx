@@ -5,6 +5,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { fetchTrafficApi } from '@/services/api';
 import type { RouteLeg } from '@/services/RouteFinder';
+import govData from '@/data/gov_data.json';
 
 // Fix for default marker icon
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -71,59 +72,56 @@ export const RouteMapModal: React.FC<RouteMapModalProps> = ({
   const [segmentIndices, setSegmentIndices] = useState<Record<string, { start: number; end: number }>>({});
   const [loading, setLoading] = useState(false);
 
+  // Helper to get stop info with strict priority
+  const getStopInfo = React.useCallback((stopId: string) => {
+    const normalizedId = stopId.replace('/', '_');
+    const baseId = stopId.split('/')[0].split('_')[0];
+    
+    // 1. Try strict match first
+    let match = govData.stops.find((s: any) => 
+      s.raw?.P_ALIAS === stopId || 
+      s.raw?.P_ALIAS === normalizedId
+    );
+    
+    // 2. Try Alias match (specific pole alias might match ALIAS?)
+    if (!match) {
+       match = govData.stops.find((s: any) => 
+         s.raw?.ALIAS === stopId || 
+         s.raw?.ALIAS === normalizedId
+       );
+    }
+    
+    // 3. Fallback to base ID (fuzzy)
+    if (!match) {
+       match = govData.stops.find((s: any) => 
+         s.raw?.ALIAS === baseId || 
+         s.raw?.P_ALIAS?.startsWith(baseId + '_')
+       );
+    }
+    
+    return match;
+  }, []);
+
   // Fetch traffic data for all route legs and find correct segment indices
   useEffect(() => {
     if (!isOpen || legs.length === 0) return;
 
     const fetchAllTraffic = async () => {
       setLoading(true);
-      const newTrafficData: Record<string, TrafficSegment[]> = {};
+      const newTrafficData: Record<string, any[]> = {};
       const newSegmentIndices: Record<string, { start: number; end: number }> = {};
-
-      // Import gov_data for stop coordinates
-      const govData = await import('@/data/gov_data.json');
-
+      
       for (const leg of legs) {
-        // Parse routeId (e.g., "22_0" -> route "22", direction "0")
-        const [routeNo, dir] = leg.routeId.split('_');
+        const routeNo = leg.routeName;
+        const direction = leg.direction;
         const key = leg.routeId;
 
-        if (!newTrafficData[key]) {
-          try {
-            const traffic = await fetchTrafficApi(routeNo, dir);
+        try {
+            // Fetch traffic data
+            const traffic = await fetchTrafficApi(routeNo, direction);
             newTrafficData[key] = traffic || [];
             
             const totalSegments = (traffic || []).length;
-            
-            // Helper to get stop info with strict priority
-            const getStopInfo = (stopId: string) => {
-              const normalizedId = stopId.replace('/', '_');
-              const baseId = stopId.split('/')[0].split('_')[0];
-              
-              // 1. Try strict match first
-              let match = govData.default.stops.find((s: any) => 
-                s.raw?.P_ALIAS === stopId || 
-                s.raw?.P_ALIAS === normalizedId
-              );
-              
-              // 2. Try Alias match (specific pole alias might match ALIAS?)
-              if (!match) {
-                 match = govData.default.stops.find((s: any) => 
-                   s.raw?.ALIAS === stopId || 
-                   s.raw?.ALIAS === normalizedId
-                 );
-              }
-              
-              // 3. Fallback to base ID (fuzzy)
-              if (!match) {
-                 match = govData.default.stops.find((s: any) => 
-                   s.raw?.ALIAS === baseId || 
-                   s.raw?.P_ALIAS?.startsWith(baseId + '_')
-                 );
-              }
-              
-              return match;
-            };
             
             // Helper to find closest segment index for a stop
             const findClosestSegment = (stopId: string) => {
@@ -226,7 +224,6 @@ export const RouteMapModal: React.FC<RouteMapModalProps> = ({
             newTrafficData[key] = [];
             newSegmentIndices[key] = { start: 0, end: 0 };
           }
-        }
       }
 
       setTrafficData(newTrafficData);
@@ -235,7 +232,7 @@ export const RouteMapModal: React.FC<RouteMapModalProps> = ({
     };
 
     fetchAllTraffic();
-  }, [isOpen, legs]);
+  }, [isOpen, legs, getStopInfo]);
 
   if (!isOpen) return null;
 
@@ -375,13 +372,16 @@ export const RouteMapModal: React.FC<RouteMapModalProps> = ({
                 {filteredSegments.length > 0 && (() => {
                   const lastSeg = filteredSegments[filteredSegments.length - 1];
                   const lastPoint = lastSeg.path[lastSeg.path.length - 1];
+                  const isTransfer = legIdx < legs.length - 1;
+                  const borderColor = isTransfer ? '#f97316' : '#14b8a6'; // Orange for transfer, Teal for dest
+                  
                   const dotIcon = L.divIcon({
                     className: '',
                     html: `<div style="
                       width: 8px;
                       height: 8px;
                       background-color: white;
-                      border: 2px solid #14b8a6;
+                      border: 2px solid ${borderColor};
                       border-radius: 50%;
                       box-sizing: content-box;
                     "></div>`,
@@ -396,6 +396,64 @@ export const RouteMapModal: React.FC<RouteMapModalProps> = ({
                       icon={dotIcon}
                       zIndexOffset={1000} // Force on top of the Blue Pin
                     />
+                  );
+                })()}
+
+                {/* Transfer UI: If not the last leg, show transfer info */}
+                {legIdx < legs.length - 1 && (() => {
+                  const currentLegEndStop = leg.stops[leg.stops.length - 1];
+                  const nextLegStartStop = legs[legIdx + 1].stops[0];
+                  
+                  // Get coordinates
+                  const endInfo = getStopInfo(currentLegEndStop);
+                  const startInfo = getStopInfo(nextLegStartStop);
+                  
+                  if (!endInfo || !startInfo) return null;
+                  
+                  const endPos: [number, number] = [endInfo.lat, endInfo.lon];
+                  const startPos: [number, number] = [startInfo.lat, startInfo.lon];
+                  
+                  // Check if walking is needed (different stops)
+                  const isWalking = currentLegEndStop !== nextLegStartStop;
+                  
+                  return (
+                    <React.Fragment key={`transfer-${legIdx}`}>
+                      {/* Transfer Marker at Alight Stop */}
+                      <Marker 
+                        position={endPos}
+                        icon={L.divIcon({
+                          className: '',
+                          html: `<div style="
+                            background-color: white;
+                            border: 2px solid #f97316;
+                            border-radius: 4px;
+                            padding: 2px 4px;
+                            font-size: 10px;
+                            font-weight: bold;
+                            color: #f97316;
+                            white-space: nowrap;
+                            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+                            transform: translate(-50%, -50%);
+                          ">${t('route_result.transfer', 'Transfer')}</div>`,
+                          iconSize: [40, 20],
+                          iconAnchor: [20, 10]
+                        })}
+                        zIndexOffset={900}
+                      />
+                      
+                      {/* Walking Path if needed */}
+                      {isWalking && (
+                        <Polyline
+                          positions={[endPos, startPos]}
+                          pathOptions={{
+                            color: '#f97316', // Orange for transfer walk
+                            dashArray: '5, 8',
+                            weight: 3,
+                            opacity: 0.8
+                          }}
+                        />
+                      )}
+                    </React.Fragment>
                   );
                 })()}
               </React.Fragment>
