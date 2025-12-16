@@ -39,7 +39,7 @@ export const RouteResultsList: React.FC<RouteResultsListProps> = ({
     );
   }
 
-  if (!results) return null;
+  if (!results || results.length === 0) return null;
 
   return (
     <div className="space-y-4">
