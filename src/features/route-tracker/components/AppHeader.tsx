@@ -65,31 +65,32 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       
       {/* Active Route Header (Compact) */}
       {busData && (
-        <div className="flex flex-col gap-2 bg-white/10 p-3 rounded-lg backdrop-blur-md shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="bg-white text-teal-600 font-bold px-3 py-1 rounded text-xl shadow">
+        <div className="flex flex-row justify-between items-center bg-white/10 p-3 rounded-lg backdrop-blur-md shadow-sm">
+          {/* Left: Route & Destination */}
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="bg-white text-teal-600 font-bold px-3 py-1 rounded text-xl shadow flex-shrink-0">
               {activeRoute}
             </div>
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 pr-2">
               <div className="text-xs text-teal-100 uppercase font-semibold tracking-wider">{t('to_destination')}</div>
-              <div className="font-medium truncate text-white text-lg drop-shadow-sm">
+              <div className="font-medium truncate text-white text-lg drop-shadow-sm leading-tight">
                 {getLocalizedStopName(busData.stops[busData.stops.length-1]?.staCode, busData.stops[busData.stops.length-1]?.staName)}
               </div>
             </div>
           </div>
 
-          {/* Service Hours */}
+          {/* Right: Service Hours (Stacked) */}
           {(busData.firstBusTime || busData.lastBusTime) && (
-             <div className="flex items-center gap-4 text-sm text-teal-50 font-bold border-t border-white/20 pt-2 mt-1">
+             <div className="flex flex-col items-end gap-1.5 text-xs text-teal-50 font-bold flex-shrink-0 ml-1">
                 {busData.firstBusTime && (
-                  <div className="flex items-center gap-1.5 bg-black/10 px-2 py-0.5 rounded">
-                    <span className="opacity-75 text-xs uppercase">{t('first_bus', 'First')}</span>
+                  <div className="flex items-center gap-1.5 bg-black/10 px-2 py-1 rounded w-full justify-end">
+                    <span className="opacity-75 uppercase text-[10px]">{t('first_bus', 'First')}</span>
                     <span className="font-mono">{busData.firstBusTime}</span>
                   </div>
                 )}
                 {busData.lastBusTime && (
-                  <div className="flex items-center gap-1.5 bg-black/10 px-2 py-0.5 rounded">
-                     <span className="opacity-75 text-xs uppercase">{t('last_bus', 'Last')}</span>
+                  <div className="flex items-center gap-1.5 bg-black/10 px-2 py-1 rounded w-full justify-end">
+                     <span className="opacity-75 uppercase text-[10px]">{t('last_bus', 'Last')}</span>
                      <span className="font-mono">{busData.lastBusTime}</span>
                   </div>
                 )}
