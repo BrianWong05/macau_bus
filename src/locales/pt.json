@@ -49,7 +49,7 @@
     "no_route": "Nenhuma rota encontrada",
     "search_error": "Erro na pesquisa",
     "from": "De",
-    "search_placeholder": "Nome ou ID da paragem",
+    "search_placeholder": "Paragem, local ou ID",
     "enter_stop_id": "ID da paragem (ex: M123)",
     "use_location": "Usar localização",
     "my_location": "Minha Localização",

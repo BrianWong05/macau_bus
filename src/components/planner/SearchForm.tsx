@@ -113,7 +113,7 @@ export const SearchForm: React.FC<SearchFormProps> = ({
               onChange={(e) => onStartChange(e.target.value)}
               onFocus={() => onFocusField('start')}
               onBlur={onBlurField}
-              placeholder={t('route_planner.search_placeholder', 'Search stop name or ID')}
+              placeholder={t('route_planner.search_placeholder', 'Search stop, place or ID')}
               className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
             />
             {(suggestions.length > 0 || placeResults.length > 0) && activeField === 'start' && (
@@ -192,7 +192,7 @@ export const SearchForm: React.FC<SearchFormProps> = ({
             onChange={(e) => onEndChange(e.target.value)}
             onFocus={() => onFocusField('end')}
             onBlur={onBlurField}
-            placeholder={t('route_planner.search_placeholder', 'Search stop name or ID')}
+            placeholder={t('route_planner.search_placeholder', 'Search stop, place or ID')}
             className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all"
           />
           {(suggestions.length > 0 || placeResults.length > 0) && activeField === 'end' && (

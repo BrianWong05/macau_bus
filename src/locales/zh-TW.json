@@ -49,7 +49,7 @@
     "no_route": "找不到往返這兩個車站的路線",
     "search_error": "搜尋時發生錯誤",
     "from": "從",
-    "search_placeholder": "輸入車站名稱或編號",
+    "search_placeholder": "搜尋車站、地點或編號",
     "enter_stop_id": "輸入車站編號 (如: M123)",
     "use_location": "使用我的位置",
     "my_location": "我的位置",
