@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/macau_bus/',
+  base: '/macau-bus/',
   plugins: [react()],
   resolve: {
     alias: {
