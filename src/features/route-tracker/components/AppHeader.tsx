@@ -50,7 +50,13 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               </svg>
             </button>
           )}
-          {!busData && "🚍"} {t('app_title')}
+          {!busData && (
+            <img 
+              src="/macau-bus/logo.jpg" 
+              alt="Logo" 
+              className="w-8 h-8 rounded-full shadow-sm mr-2 object-cover bg-white"
+            />
+          )} {t('app_title')}
         </h1>
         <div className="flex items-center gap-2">
           <LanguageSwitcher />
